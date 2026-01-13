@@ -1,0 +1,28 @@
+import { NextResponse } from "next/server"
+import { getServerSession } from "next-auth"
+import { authOptions } from "../../../auth/[...nextauth]/route"
+import { prisma } from "@/lib/prisma"
+
+export async function DELETE(
+  request: Request,
+  { params }: { params: { id: string } }
+) {
+  const session = await getServerSession(authOptions)
+
+  if (!session || (session.user.role !== "SUPER_ADMIN" && session.user.role !== "MANAGER")) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
+
+  try {
+    await prisma.campus.delete({
+      where: { id: params.id },
+    })
+
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    return NextResponse.json(
+      { error: "캠퍼스 삭제에 실패했습니다." },
+      { status: 500 }
+    )
+  }
+}

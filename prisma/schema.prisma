@@ -1,0 +1,395 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  MANAGER
+  STUDENT
+}
+
+enum StudentStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum LearningType {
+  TYPE_A
+  TYPE_B
+}
+
+enum SessionStatus {
+  IN_PROGRESS
+  COMPLETED
+  ABANDONED
+}
+
+enum CodeCategory {
+  GRADE
+  LEVEL
+}
+
+model User {
+  id            String    @id @default(cuid())
+  username      String    @unique
+  password      String
+  name          String?
+  role          UserRole
+  campusId      String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  campus        Campus?   @relation(fields: [campusId], references: [id], onDelete: SetNull)
+  student       Student?
+  loginAttempts LoginAttempt[]
+
+  @@index([username])
+  @@index([role])
+  @@index([campusId])
+}
+
+model Campus {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users     User[]
+  teachers  Teacher[]
+  classes   Class[]
+  students  Student[]
+  scoreLogs ScoreLog[]
+  scoreDailies ScoreDaily[]
+  learningAttempts StudentLearningAttempt[]
+}
+
+model Teacher {
+  id        String   @id @default(cuid())
+  name      String
+  campusId  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  campus    Campus   @relation(fields: [campusId], references: [id], onDelete: Cascade)
+  classes   Class[]
+
+  @@unique([campusId, name])
+  @@index([campusId])
+}
+
+model Code {
+  id        String       @id @default(cuid())
+  category  CodeCategory
+  value     String
+  order     Int
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  classLevels     Class[]          @relation("ClassLevel")
+  classGrades     Class[]          @relation("ClassGrade")
+  studentGrades   Student[]        @relation("StudentGrade")
+  studentLevels  Student[]        @relation("StudentLevel")
+  learningLevels  LearningModule[] @relation("LearningLevel")
+  learningGrades   LearningModule[] @relation("LearningGrade")
+
+  @@unique([category, value])
+  @@index([category, order])
+}
+
+model Class {
+  id        String   @id @default(cuid())
+  name      String
+  campusId  String
+  levelId   String
+  gradeId   String
+  teacherId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+
+  campus    Campus   @relation(fields: [campusId], references: [id], onDelete: Cascade)
+  level     Code     @relation("ClassLevel", fields: [levelId], references: [id])
+  grade     Code     @relation("ClassGrade", fields: [gradeId], references: [id])
+  teacher   Teacher  @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  studentClasses StudentClass[]
+  assignments ClassAssignment[]
+  scoreLogs ScoreLog[]
+  scoreDailies ScoreDaily[]
+  learningAttempts StudentLearningAttempt[]
+
+  @@index([campusId])
+  @@index([teacherId])
+  @@index([deletedAt])
+}
+
+model Student {
+  id                String          @id @default(cuid())
+  name              String
+  username          String          @unique
+  password          String
+  plainPassword     String?         // 관리자용 평문 비밀번호 (보안 주의)
+  status            StudentStatus   @default(ACTIVE)
+  campusId          String
+  gradeId           String?
+  levelId           String?
+  school            String?
+  autoLoginToken    String?         @unique
+  autoLoginTokenExpiresAt DateTime?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  campus            Campus          @relation(fields: [campusId], references: [id], onDelete: Cascade)
+  grade             Code?           @relation("StudentGrade", fields: [gradeId], references: [id], onDelete: SetNull)
+  level             Code?           @relation("StudentLevel", fields: [levelId], references: [id], onDelete: SetNull)
+  user              User?           @relation(fields: [id], references: [id], onDelete: Cascade)
+  studentClasses    StudentClass[]
+  sessions          StudySession[]
+  progress          StudentAssignmentProgress[]
+  wrongAnswers      WrongAnswer[]
+  scoreLogs         ScoreLog[]
+  scoreDailies      ScoreDaily[]
+  learningAttempts  StudentLearningAttempt[]
+
+  @@index([campusId])
+  @@index([status])
+  @@index([username])
+  @@index([autoLoginToken])
+}
+
+model StudentClass {
+  id        String    @id @default(cuid())
+  studentId String
+  classId   String
+  startAt   DateTime  @default(now())
+  endAt     DateTime?
+  createdAt DateTime  @default(now())
+
+  student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  class     Class    @relation(fields: [classId], references: [id], onDelete: Cascade)
+
+  @@index([studentId, endAt])
+  @@index([classId, endAt])
+  @@index([studentId, classId])
+  @@index([studentId, classId, endAt])
+}
+
+model LearningModule {
+  id        String        @id @default(cuid())
+  title     String
+  type      LearningType
+  levelId   String
+  gradeId   String?
+  memo      String?
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  level     Code          @relation("LearningLevel", fields: [levelId], references: [id])
+  grade     Code?         @relation("LearningGrade", fields: [gradeId], references: [id], onDelete: SetNull)
+  items     LearningItem[]
+  assignments ClassAssignmentModule[]
+  sessions  StudySession[]
+  progress  StudentAssignmentProgress[]
+  wrongAnswers WrongAnswer[]
+  learningAttempts StudentLearningAttempt[]
+
+  @@index([levelId])
+  @@index([gradeId])
+}
+
+model LearningItem {
+  id        String   @id @default(cuid())
+  moduleId  String
+  order     Int
+  payloadJson Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  module    LearningModule @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+
+  @@index([moduleId, order])
+}
+
+model ClassAssignment {
+  id           String   @id @default(cuid())
+  classId      String
+  assignedDate DateTime
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  class        Class    @relation(fields: [classId], references: [id], onDelete: Cascade)
+  modules      ClassAssignmentModule[]
+  progress     StudentAssignmentProgress[]
+  sessions     StudySession[]
+
+  @@unique([classId, assignedDate])
+  @@index([classId, assignedDate])
+}
+
+model ClassAssignmentModule {
+  id           String   @id @default(cuid())
+  assignmentId String
+  moduleId     String
+  order        Int
+  createdAt    DateTime @default(now())
+
+  assignment   ClassAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  module       LearningModule  @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+
+  @@unique([assignmentId, moduleId])
+  @@index([assignmentId])
+  @@index([moduleId])
+}
+
+model StudySession {
+  id           String        @id @default(cuid())
+  studentId    String
+  assignmentId String
+  moduleId     String
+  status       SessionStatus @default(IN_PROGRESS)
+  payloadJson  Json?
+  score        Int?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  completedAt  DateTime?
+
+  student      Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  assignment   ClassAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  module       LearningModule  @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+
+  @@index([studentId, assignmentId, moduleId, status])
+  @@index([studentId, status])
+}
+
+model StudentAssignmentProgress {
+  id                      String   @id @default(cuid())
+  studentId               String
+  assignmentId            String
+  moduleId                String
+  progressPct             Int      @default(0)
+  completed                Boolean  @default(false)
+  createdAt               DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+  completedAt             DateTime?
+  // 단어목록 진행률
+  wordlistMaxIndex        Int?     @default(0)
+  wordlistProgressPct     Int?     @default(0)
+  // 암기학습 진행률
+  memorizeMaxIndex        Int?     @default(0)
+  memorizeProgressPct     Int?     @default(0)
+
+  student      Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  assignment   ClassAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  module       LearningModule  @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, assignmentId, moduleId])
+  @@index([studentId, assignmentId])
+  @@index([studentId, completed])
+}
+
+model ScoreLog {
+  id           String   @id @default(cuid())
+  studentId    String
+  campusId     String
+  classId      String?
+  activityType String
+  score        Int
+  createdAt    DateTime @default(now())
+
+  student      Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  campus       Campus   @relation(fields: [campusId], references: [id], onDelete: Cascade)
+  class        Class?   @relation(fields: [classId], references: [id], onDelete: SetNull)
+
+  @@index([campusId, createdAt])
+  @@index([classId, createdAt])
+  @@index([studentId, createdAt])
+  @@index([createdAt])
+}
+
+model ScoreDaily {
+  id           String   @id @default(cuid())
+  date         DateTime
+  studentId    String
+  campusId     String
+  classId      String?
+  totalScore   Int      @default(0)
+  totalCount   Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  student      Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  campus       Campus   @relation(fields: [campusId], references: [id], onDelete: Cascade)
+  class        Class?   @relation(fields: [classId], references: [id], onDelete: SetNull)
+
+  @@unique([date, campusId, classId, studentId])
+  @@index([date, campusId])
+  @@index([date, classId])
+  @@index([date, studentId])
+  @@index([campusId, date])
+}
+
+model StudentLearningAttempt {
+  id           String   @id @default(cuid())
+  studentId    String
+  campusId     String
+  classId      String?
+  assignmentDate DateTime
+  moduleId     String
+  phase        Int      // 1, 2, or 3
+  totalCount   Int      // N or M
+  correctCount Int      // K or L
+  scorePct     Int      // 0~100
+  completedAt  DateTime @default(now())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  student      Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  campus       Campus   @relation(fields: [campusId], references: [id], onDelete: Cascade)
+  class        Class?   @relation(fields: [classId], references: [id], onDelete: SetNull)
+  module       LearningModule @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+
+  @@index([studentId, assignmentDate, moduleId, phase])
+  @@index([campusId, assignmentDate])
+  @@index([classId, assignmentDate])
+  @@index([assignmentDate, campusId])
+}
+
+model WrongAnswer {
+  id        String   @id @default(cuid())
+  studentId String
+  moduleId  String
+  itemId    String?
+  question  String
+  answer    String
+  correctAnswer String
+  createdAt DateTime @default(now())
+
+  student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  module    LearningModule @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+
+  @@index([studentId])
+  @@index([moduleId])
+}
+
+model LoginAttempt {
+  id        String   @id @default(cuid())
+  userId    String
+  username  String
+  success   Boolean  @default(false)
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([username, createdAt])
+  @@index([userId, createdAt])
+  @@index([createdAt])
+}
