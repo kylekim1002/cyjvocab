@@ -146,6 +146,7 @@ export async function PATCH(
               choice4: item.choice4.trim(),
               correct_index: item.correct_index,
               image_url: item.image_url?.trim() || null,
+              audio_url: item.audio_url?.trim() || null,
             },
           })),
         } : undefined,

@@ -43,13 +43,13 @@ async function main() {
   console.log('코드값 생성 완료')
 
   // 관리자 계정 생성
-  const hashedPassword = await bcrypt.hash('admin123', 10)
+  const hashedPassword = await bcrypt.hash('kyle1002!@', 10)
   
   const adminUser = await prisma.user.upsert({
-    where: { username: 'admin' },
+    where: { username: 'cyjkyle' },
     update: {},
     create: {
-      username: 'admin',
+      username: 'cyjkyle',
       password: hashedPassword,
       name: '관리자',
       role: 'SUPER_ADMIN' as const,

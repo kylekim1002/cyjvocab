@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Plus, Trash2, Calendar, Users, BookOpen, ChevronDown, ChevronRight } from "lucide-react"
+import { Plus, Trash2, Users, BookOpen, ChevronDown, ChevronRight } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
 import Link from "next/link"
 
@@ -769,11 +769,6 @@ export function ClassManagement({
                       >
                         <BookOpen className="h-4 w-4" />
                       </Button>
-                      <Link href={`/admin/classes/${cls.id}`}>
-                        <Button variant="outline" size="sm">
-                          <Calendar className="h-4 w-4" />
-                        </Button>
-                      </Link>
                       <Button
                         type="button"
                         variant="destructive"

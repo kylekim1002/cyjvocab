@@ -83,8 +83,8 @@ npm run dev
 
 시드 데이터 실행 시 다음 계정이 생성됩니다:
 
-- **아이디**: admin
-- **비밀번호**: admin123
+- **아이디**: cyjkyle
+- **비밀번호**: kyle1002!@
 - **역할**: SUPER_ADMIN
 
 ## 배포 (Vercel)

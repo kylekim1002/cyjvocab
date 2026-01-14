@@ -22,6 +22,8 @@ interface LearningItem {
   correct_index: number
   image_url?: string
   image_file?: File | null
+  audio_url?: string
+  audio_file?: File | null
 }
 
 interface LearningModule {
@@ -87,6 +89,7 @@ export function LearningManagement({
         choice4: "",
         correct_index: 0,
         image_url: "",
+        audio_url: "",
       },
     ])
   }
@@ -110,6 +113,30 @@ export function LearningManagement({
       ...newItems[index],
       image_file: file,
       image_url: file ? undefined : newItems[index].image_url,
+    }
+    setItems(newItems)
+  }
+
+  // 음원 파일 변경
+  const handleAudioFileChange = (index: number, file: File | null) => {
+    if (file) {
+      // 파일 크기 제한: 10MB
+      const maxSize = 10 * 1024 * 1024 // 10MB
+      if (file.size > maxSize) {
+        toast({
+          title: "오류",
+          description: `문항 ${index + 1}: 음원 파일 크기는 10MB를 넘을 수 없습니다.`,
+          variant: "destructive",
+        })
+        return
+      }
+    }
+    
+    const newItems = [...items]
+    newItems[index] = {
+      ...newItems[index],
+      audio_file: file,
+      audio_url: file ? undefined : newItems[index].audio_url,
     }
     setItems(newItems)
   }
@@ -171,13 +198,23 @@ export function LearningManagement({
           return
         }
       }
+      // 음원 파일과 URL 동시 입력 체크
+      if (item.audio_file && item.audio_url) {
+        toast({
+          title: "오류",
+          description: `문항 ${i + 1}: 음원 파일과 URL을 동시에 입력할 수 없습니다.`,
+          variant: "destructive",
+        })
+        return
+      }
     }
 
     try {
-      // 이미지 파일이 있는 경우 업로드 (나중에 Supabase Storage 연동)
+      // 이미지/음원 파일이 있는 경우 업로드
       const itemsToSubmit = await Promise.all(
         items.map(async (item) => {
           let imageUrl = item.image_url || null
+          let audioUrl = item.audio_url || null
           
           if (item.image_file) {
             // TODO: Supabase Storage에 업로드
@@ -186,6 +223,30 @@ export function LearningManagement({
               title: "알림",
               description: "이미지 업로드 기능은 준비 중입니다.",
             })
+          }
+          
+          if (item.audio_file) {
+            // 음원 파일 업로드
+            try {
+              const uploadFormData = new FormData()
+              uploadFormData.append("file", item.audio_file)
+              
+              const uploadResponse = await fetch("/api/admin/upload/audio", {
+                method: "POST",
+                body: uploadFormData,
+              })
+              
+              if (!uploadResponse.ok) {
+                const error = await uploadResponse.json()
+                throw new Error(error.error || "음원 업로드 실패")
+              }
+              
+              const uploadData = await uploadResponse.json()
+              audioUrl = uploadData.url
+            } catch (uploadError: any) {
+              console.error("Audio upload error:", uploadError)
+              throw new Error(`문항 ${items.indexOf(item) + 1}: 음원 업로드 실패 - ${uploadError.message}`)
+            }
           }
 
           return {
@@ -196,6 +257,7 @@ export function LearningManagement({
             choice4: item.choice4.trim(),
             correct_index: item.correct_index,
             image_url: imageUrl?.trim() || null,
+            audio_url: audioUrl?.trim() || null,
           }
         })
       )
@@ -394,6 +456,7 @@ export function LearningManagement({
       choice4: item.payloadJson.choice4 || "",
       correct_index: item.payloadJson.correct_index || 0,
       image_url: item.payloadJson.image_url || undefined,
+      audio_url: item.payloadJson.audio_url || undefined,
     }))
     setEditItems(loadedItems)
     setIsEditDialogOpen(true)
@@ -458,14 +521,47 @@ export function LearningManagement({
           return
         }
       }
+      // 음원 파일과 URL 동시 입력 체크
+      if (item.audio_file && item.audio_url) {
+        toast({
+          title: "오류",
+          description: `문항 ${i + 1}: 음원 파일과 URL을 동시에 입력할 수 없습니다.`,
+          variant: "destructive",
+        })
+        return
+      }
     }
 
     try {
       const itemsToSubmit = await Promise.all(
         editItems.map(async (item) => {
           let imageUrl = item.image_url || null
+          let audioUrl = item.audio_url || null
           if (item.image_file) {
             // TODO: 이미지 업로드
+          }
+          if (item.audio_file) {
+            // 음원 파일 업로드
+            try {
+              const uploadFormData = new FormData()
+              uploadFormData.append("file", item.audio_file)
+              
+              const uploadResponse = await fetch("/api/admin/upload/audio", {
+                method: "POST",
+                body: uploadFormData,
+              })
+              
+              if (!uploadResponse.ok) {
+                const error = await uploadResponse.json()
+                throw new Error(error.error || "음원 업로드 실패")
+              }
+              
+              const uploadData = await uploadResponse.json()
+              audioUrl = uploadData.url
+            } catch (uploadError: any) {
+              console.error("Audio upload error:", uploadError)
+              throw new Error(`문항 ${editItems.indexOf(item) + 1}: 음원 업로드 실패 - ${uploadError.message}`)
+            }
           }
           return {
             word_text: item.word_text.trim(),
@@ -475,6 +571,7 @@ export function LearningManagement({
             choice4: item.choice4.trim(),
             correct_index: item.correct_index,
             image_url: imageUrl?.trim() || null,
+            audio_url: audioUrl?.trim() || null,
           }
         })
       )
@@ -691,6 +788,28 @@ export function LearningManagement({
                             />
                           </div>
                         )}
+                        <div className="space-y-2">
+                          <Label>음원 (파일 또는 URL 중 하나만, 선택사항)</Label>
+                          <Input
+                            type="file"
+                            accept="audio/*"
+                            onChange={(e) => handleAudioFileChange(index, e.target.files?.[0] || null)}
+                          />
+                          <p className="text-xs text-muted-foreground">
+                            음원 파일 크기는 10MB를 넘을 수 없습니다.
+                          </p>
+                          <Input
+                            value={item.audio_url || ""}
+                            onChange={(e) => handleUpdateItem(index, "audio_url", e.target.value)}
+                            placeholder="음원 URL 입력"
+                            disabled={!!item.audio_file}
+                          />
+                          {item.audio_file && (
+                            <p className="text-xs text-muted-foreground">
+                              선택된 파일: {item.audio_file.name} ({(item.audio_file.size / 1024 / 1024).toFixed(2)}MB)
+                            </p>
+                          )}
+                        </div>
                         <div className="grid grid-cols-2 gap-2">
                           <div>
                             <Label>보기 1 *</Label>
@@ -904,6 +1023,7 @@ export function LearningManagement({
                             choice4: "",
                             correct_index: 0,
                             image_url: "",
+                            audio_url: "",
                           },
                         ])
                       }}
@@ -968,6 +1088,53 @@ export function LearningManagement({
                               />
                             </div>
                           )}
+                          <div className="space-y-2">
+                            <Label>음원 (파일 또는 URL 중 하나만, 선택사항)</Label>
+                            <Input
+                              type="file"
+                              accept="audio/*"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0] || null
+                                if (file) {
+                                  // 파일 크기 제한: 10MB
+                                  const maxSize = 10 * 1024 * 1024 // 10MB
+                                  if (file.size > maxSize) {
+                                    toast({
+                                      title: "오류",
+                                      description: `문항 ${index + 1}: 음원 파일 크기는 10MB를 넘을 수 없습니다.`,
+                                      variant: "destructive",
+                                    })
+                                    return
+                                  }
+                                }
+                                const newItems = [...editItems]
+                                newItems[index] = {
+                                  ...newItems[index],
+                                  audio_file: file,
+                                  audio_url: file ? undefined : newItems[index].audio_url,
+                                }
+                                setEditItems(newItems)
+                              }}
+                            />
+                            <p className="text-xs text-muted-foreground">
+                              음원 파일 크기는 10MB를 넘을 수 없습니다.
+                            </p>
+                            <Input
+                              value={item.audio_url || ""}
+                              onChange={(e) => {
+                                const newItems = [...editItems]
+                                newItems[index] = { ...newItems[index], audio_url: e.target.value }
+                                setEditItems(newItems)
+                              }}
+                              placeholder="음원 URL 입력"
+                              disabled={!!item.audio_file}
+                            />
+                            {item.audio_file && (
+                              <p className="text-xs text-muted-foreground">
+                                선택된 파일: {item.audio_file.name} ({(item.audio_file.size / 1024 / 1024).toFixed(2)}MB)
+                              </p>
+                            )}
+                          </div>
                           <div className="grid grid-cols-2 gap-2">
                             <div>
                               <Label>보기 1 *</Label>

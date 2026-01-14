@@ -140,6 +140,28 @@ export async function POST(request: Request) {
           },
         },
       })
+
+      // 6. ClassAssignmentModule 삭제 (해당 기간의 assignment의 모듈 연결 삭제)
+      if (assignmentIds.length > 0) {
+        await tx.classAssignmentModule.deleteMany({
+          where: {
+            assignmentId: {
+              in: assignmentIds,
+            },
+          },
+        })
+      }
+
+      // 7. ClassAssignment 삭제 (해당 기간의 assignment 삭제)
+      if (assignmentIds.length > 0) {
+        await tx.classAssignment.deleteMany({
+          where: {
+            id: {
+              in: assignmentIds,
+            },
+          },
+        })
+      }
     })
 
     return NextResponse.json({

@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { useToast } from "@/components/ui/use-toast"
 
 export default function LoginPage() {
@@ -21,18 +21,30 @@ export default function LoginPage() {
     setIsLoading(true)
 
     try {
+      console.log("로그인 시도:", { username })
       const result = await signIn("credentials", {
         username,
         password,
         redirect: false,
       })
 
+      console.log("로그인 결과:", result)
+
       if (result?.error) {
+        console.error("로그인 오류:", result.error)
+        let errorMessage = "아이디 또는 비밀번호가 올바르지 않습니다."
+        
+        if (result.error === "CredentialsSignin") {
+          errorMessage = "아이디 또는 비밀번호가 올바르지 않습니다."
+        } else if (result.error.includes("로그인 시도가 너무 많습니다")) {
+          errorMessage = result.error
+        } else {
+          errorMessage = `로그인에 실패했습니다: ${result.error}`
+        }
+        
         toast({
           title: "로그인 실패",
-          description: result.error === "CredentialsSignin" 
-            ? "아이디 또는 비밀번호가 올바르지 않습니다."
-            : result.error,
+          description: errorMessage,
           variant: "destructive",
         })
         setIsLoading(false)

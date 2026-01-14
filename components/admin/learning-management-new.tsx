@@ -226,12 +226,27 @@ export function LearningManagement({
           }
           
           if (item.audio_file) {
-            // TODO: Supabase Storage에 업로드
-            // 임시로 URL 생성 (실제로는 업로드 후 URL 반환)
-            toast({
-              title: "알림",
-              description: "음원 업로드 기능은 준비 중입니다.",
-            })
+            // 음원 파일 업로드
+            try {
+              const uploadFormData = new FormData()
+              uploadFormData.append("file", item.audio_file)
+              
+              const uploadResponse = await fetch("/api/admin/upload/audio", {
+                method: "POST",
+                body: uploadFormData,
+              })
+              
+              if (!uploadResponse.ok) {
+                const error = await uploadResponse.json()
+                throw new Error(error.error || "음원 업로드 실패")
+              }
+              
+              const uploadData = await uploadResponse.json()
+              audioUrl = uploadData.url
+            } catch (uploadError: any) {
+              console.error("Audio upload error:", uploadError)
+              throw new Error(`문항 ${items.indexOf(item) + 1}: 음원 업로드 실패 - ${uploadError.message}`)
+            }
           }
 
           return {
@@ -463,7 +478,27 @@ export function LearningManagement({
             // TODO: 이미지 업로드
           }
           if (item.audio_file) {
-            // TODO: 음원 업로드
+            // 음원 파일 업로드
+            try {
+              const uploadFormData = new FormData()
+              uploadFormData.append("file", item.audio_file)
+              
+              const uploadResponse = await fetch("/api/admin/upload/audio", {
+                method: "POST",
+                body: uploadFormData,
+              })
+              
+              if (!uploadResponse.ok) {
+                const error = await uploadResponse.json()
+                throw new Error(error.error || "음원 업로드 실패")
+              }
+              
+              const uploadData = await uploadResponse.json()
+              audioUrl = uploadData.url
+            } catch (uploadError: any) {
+              console.error("Audio upload error:", uploadError)
+              throw new Error(`문항 ${editItems.indexOf(item) + 1}: 음원 업로드 실패 - ${uploadError.message}`)
+            }
           }
           return {
             word_text: item.word_text.trim(),
