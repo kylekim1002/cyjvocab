@@ -29,6 +29,13 @@ const menuItems = [
     title: "코드값 관리",
     href: "/admin/codes",
     icon: Settings,
+    superAdminOnly: true,
+  },
+  {
+    title: "관리자 관리",
+    href: "/admin/managers",
+    icon: Settings,
+    superAdminOnly: true,
   },
   {
     title: "캠퍼스/선생님",

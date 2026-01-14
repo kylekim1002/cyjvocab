@@ -3,6 +3,29 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "../../auth/[...nextauth]/route"
 import { prisma } from "@/lib/prisma"
 
+export async function GET(request: Request) {
+  const session = await getServerSession(authOptions)
+
+  if (!session || (session.user.role !== "SUPER_ADMIN" && session.user.role !== "MANAGER")) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
+
+  const { searchParams } = new URL(request.url)
+  const campusId = searchParams.get("campus_id")
+
+  const where: any = {}
+  if (campusId) {
+    where.campusId = campusId
+  }
+
+  const teachers = await prisma.teacher.findMany({
+    where,
+    orderBy: { name: "asc" },
+  })
+
+  return NextResponse.json(teachers)
+}
+
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions)
 

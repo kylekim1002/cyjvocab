@@ -1,0 +1,36 @@
+import { getServerSession } from "next-auth"
+import { authOptions } from "../../api/auth/[...nextauth]/route"
+import { redirect } from "next/navigation"
+import { prisma } from "@/lib/prisma"
+import { ScoresManagement } from "@/components/admin/scores-management"
+
+export default async function ScoresPage() {
+  const session = await getServerSession(authOptions)
+
+  if (!session || (session.user.role !== "SUPER_ADMIN" && session.user.role !== "MANAGER")) {
+    redirect("/admin")
+  }
+
+  // 캠퍼스 목록
+  const campuses = await prisma.campus.findMany({
+    orderBy: { name: "asc" },
+  })
+
+  // 코드값 목록 (학년, 레벨)
+  const codes = await prisma.code.findMany({
+    orderBy: [
+      { category: "asc" },
+      { order: "asc" },
+    ],
+  })
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-3xl font-bold">성적 조회</h1>
+        <p className="text-muted-foreground">학생들의 학습 결과를 날짜·학습별로 조회하고 엑셀로 다운로드할 수 있습니다.</p>
+      </div>
+      <ScoresManagement campuses={campuses} codes={codes} />
+    </div>
+  )
+}

@@ -44,6 +44,7 @@ model User {
   name          String?
   role          UserRole
   campusId      String?
+  isActive      Boolean   @default(true)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 

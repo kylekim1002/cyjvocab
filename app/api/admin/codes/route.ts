@@ -7,7 +7,8 @@ import { CodeCategory } from "@prisma/client"
 export async function GET() {
   const session = await getServerSession(authOptions)
 
-  if (!session || (session.user.role !== "SUPER_ADMIN" && session.user.role !== "MANAGER")) {
+  // 코드값 관리는 최종 관리자만 가능
+  if (!session || session.user.role !== "SUPER_ADMIN") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
@@ -24,7 +25,8 @@ export async function GET() {
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions)
 
-  if (!session || (session.user.role !== "SUPER_ADMIN" && session.user.role !== "MANAGER")) {
+  // 코드값 관리는 최종 관리자만 가능
+  if (!session || session.user.role !== "SUPER_ADMIN") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 

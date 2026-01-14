@@ -42,6 +42,12 @@ export async function verifyCredentials(
       return null
     }
 
+    // 관리자/학생 공통: 비활성 사용자는 로그인 불가
+    if (!user.isActive) {
+      await recordLoginAttempt(username, false, ipAddress, user.id)
+      return null
+    }
+
     // 학생인 경우 상태 확인
     if (user.role === UserRole.STUDENT && user.student) {
       if (user.student.status !== StudentStatus.ACTIVE) {
