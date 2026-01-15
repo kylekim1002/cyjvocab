@@ -37,3 +37,6 @@ next-env.d.ts
 
 # prisma
 /prisma/migrations
+
+# uploads (로컬 개발용, 프로덕션에서는 Supabase Storage 사용)
+/public/uploads

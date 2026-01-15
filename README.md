@@ -45,18 +45,39 @@ npm install
 
 ### 2. 환경 변수 설정
 
-`.env` 파일을 생성하고 다음 변수들을 설정하세요:
+`.env.local` 파일을 생성하고 다음 변수들을 설정하세요:
 
 ```env
+# Supabase 설정
+NEXT_PUBLIC_SUPABASE_URL=https://[YOUR-PROJECT-REF].supabase.co
+SUPABASE_SERVICE_ROLE_KEY=[YOUR-SERVICE-ROLE-KEY]
+
+# 데이터베이스 (Supabase PostgreSQL 또는 로컬 PostgreSQL)
 DATABASE_URL="postgresql://user:password@localhost:5432/dbname?schema=public"
+# 또는 Supabase 사용 시:
+# DATABASE_URL="postgresql://postgres:[PASSWORD]@[PROJECT-REF].supabase.co:5432/postgres"
+
+# NextAuth 설정
 NEXTAUTH_URL="http://localhost:3000"
 NEXTAUTH_SECRET="your-secret-key-here-change-in-production"
+# NEXTAUTH_SECRET 생성: openssl rand -base64 32
+
+# Node Environment
 NODE_ENV="development"
 ```
 
+**참고**: `.env.example` 파일을 참고하세요.
+
 ### 3. 데이터베이스 설정
 
-Supabase에서 PostgreSQL 데이터베이스를 생성하고 연결 문자열을 `DATABASE_URL`에 설정하세요.
+#### 로컬 개발 (PostgreSQL)
+로컬 PostgreSQL을 사용하거나 Docker로 실행할 수 있습니다.
+
+#### Supabase 사용 (프로덕션 권장)
+1. [Supabase](https://supabase.com)에서 프로젝트 생성
+2. 프로젝트 설정에서 Database URL 확인
+3. `DATABASE_URL`에 연결 문자열 설정
+4. Storage 버킷 생성: `learning-audio` (Public, 10MB 제한)
 
 ### 4. Prisma 마이그레이션
 
@@ -87,25 +108,22 @@ npm run dev
 - **비밀번호**: kyle1002!@
 - **역할**: SUPER_ADMIN
 
-## 배포 (Vercel)
+## 배포 (Vercel + Supabase)
 
-### 1. Vercel에 프로젝트 연결
+자세한 배포 가이드는 [DEPLOYMENT.md](./DEPLOYMENT.md)를 참고하세요.
 
-1. [Vercel](https://vercel.com)에 로그인
-2. "New Project" 클릭
-3. GitHub 저장소 연결
-4. 환경 변수 설정:
-   - `DATABASE_URL`
-   - `NEXTAUTH_URL`
-   - `NEXTAUTH_SECRET`
+### 빠른 배포 가이드
 
-### 2. 빌드 설정
+1. **Supabase 프로젝트 생성**
+   - Storage 버킷 생성: `learning-audio` (Public)
+   - 데이터베이스 연결 문자열 확인
 
-Vercel이 자동으로 Next.js 프로젝트를 감지합니다. 빌드 명령어는 자동으로 설정됩니다.
+2. **Vercel에 프로젝트 연결**
+   - GitHub 저장소 연결
+   - 환경 변수 설정 (DEPLOYMENT.md 참고)
 
-### 3. 배포
-
-프로젝트를 푸시하면 자동으로 배포됩니다.
+3. **배포 완료**
+   - 자동 배포 또는 수동 배포
 
 ## 프로젝트 구조
 
