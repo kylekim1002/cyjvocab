@@ -110,9 +110,14 @@ npm run dev
 
 ## 배포 (Vercel + Supabase)
 
-자세한 배포 가이드는 [DEPLOYMENT.md](./DEPLOYMENT.md)를 참고하세요.
+### 🚀 초보자용 단계별 가이드
 
-### 빠른 배포 가이드
+**완전 초보자도 따라할 수 있는 상세 가이드:**
+👉 **[STEP_BY_STEP_DEPLOYMENT.md](./STEP_BY_STEP_DEPLOYMENT.md)** 를 먼저 읽어주세요!
+
+### 빠른 배포 가이드 (경험자용)
+
+자세한 배포 가이드는 [DEPLOYMENT.md](./DEPLOYMENT.md)를 참고하세요.
 
 1. **Supabase 프로젝트 생성**
    - Storage 버킷 생성: `learning-audio` (Public)
