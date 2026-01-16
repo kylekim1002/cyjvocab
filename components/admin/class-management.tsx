@@ -290,8 +290,8 @@ export function ClassManagement({
       console.error("Failed to load assigned students:", error)
     }
     
-    // 배치 가능한 학생 조회
-    await loadAvailableStudents(cls)
+    // 배치 가능한 학생 조회는 사용자가 조회 버튼을 클릭할 때만 실행
+    // 자동 조회 제거
   }
 
   // 배치 가능한 학생 조회
