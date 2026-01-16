@@ -12,10 +12,22 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url)
   const campusId = searchParams.get("campus_id")
+  const levelId = searchParams.get("level_id")
+  const gradeId = searchParams.get("grade_id")
+  const teacherId = searchParams.get("teacher_id")
 
   const where: any = { deletedAt: null }
   if (campusId) {
     where.campusId = campusId
+  }
+  if (levelId) {
+    where.levelId = levelId
+  }
+  if (gradeId) {
+    where.gradeId = gradeId
+  }
+  if (teacherId) {
+    where.teacherId = teacherId
   }
 
   const classes = await prisma.class.findMany({

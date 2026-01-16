@@ -80,6 +80,12 @@ export function ClassManagement({
   // 클래스 펼침/접힘 상태
   const [expandedClasses, setExpandedClasses] = useState<Set<string>>(new Set())
   const [classStudents, setClassStudents] = useState<Record<string, any[]>>({})
+  
+  // 조회 필터 상태
+  const [filterCampusId, setFilterCampusId] = useState<string>("")
+  const [filterType, setFilterType] = useState<"all" | "level" | "grade" | "teacher">("all")
+  const [filterValue, setFilterValue] = useState<string>("")
+  const [isLoading, setIsLoading] = useState(false)
 
   // 디버깅: 다이얼로그 상태 변경 추적
   useEffect(() => {
@@ -163,6 +169,91 @@ export function ClassManagement({
 
   const levelCodes = codes.filter((c) => c.category === "LEVEL")
   const gradeCodes = codes.filter((c) => c.category === "GRADE")
+  
+  // 조회 함수
+  const handleSearch = async () => {
+    if (!filterCampusId) {
+      toast({
+        title: "오류",
+        description: "캠퍼스를 선택해주세요.",
+        variant: "destructive",
+      })
+      return
+    }
+    
+    if (filterType !== "all" && !filterValue) {
+      toast({
+        title: "오류",
+        description: "조회 조건을 선택해주세요.",
+        variant: "destructive",
+      })
+      return
+    }
+    
+    setIsLoading(true)
+    try {
+      const params = new URLSearchParams({
+        campus_id: filterCampusId,
+      })
+      
+      if (filterType !== "all" && filterValue) {
+        if (filterType === "level") {
+          params.append("level_id", filterValue)
+        } else if (filterType === "grade") {
+          params.append("grade_id", filterValue)
+        } else if (filterType === "teacher") {
+          params.append("teacher_id", filterValue)
+        }
+      }
+      
+      const response = await fetch(`/api/admin/classes?${params}`)
+      if (response.ok) {
+        const data = await response.json()
+        setClasses(data)
+        toast({
+          title: "성공",
+          description: `${data.length}개의 클래스가 조회되었습니다.`,
+        })
+      } else {
+        throw new Error("조회 실패")
+      }
+    } catch (error) {
+      toast({
+        title: "오류",
+        description: "클래스 조회에 실패했습니다.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+  
+  // 전체 조회 (필터 초기화)
+  const handleReset = async () => {
+    setFilterCampusId("")
+    setFilterType("all")
+    setFilterValue("")
+    setIsLoading(true)
+    try {
+      const response = await fetch("/api/admin/classes")
+      if (response.ok) {
+        const data = await response.json()
+        setClasses(data)
+      }
+    } catch (error) {
+      toast({
+        title: "오류",
+        description: "클래스 목록을 불러오는데 실패했습니다.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+  
+  // 선택된 캠퍼스의 선생님 목록
+  const selectedCampusForFilter = campuses.find((c) => c.id === filterCampusId)
+  const availableTeachers = selectedCampusForFilter?.teachers || []
 
   // 학생 배치 다이얼로그 열기
   const handleOpenStudentAssignDialog = async (cls: Class) => {
@@ -667,6 +758,129 @@ export function ClassManagement({
           <CardTitle>클래스 목록</CardTitle>
         </CardHeader>
         <CardContent>
+          {/* 조회 필터 */}
+          <div className="mb-6 p-4 bg-gray-50 rounded-lg space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div>
+                <Label>캠퍼스 *</Label>
+                <Select
+                  value={filterCampusId}
+                  onValueChange={(value) => {
+                    setFilterCampusId(value)
+                    setFilterValue("")
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="캠퍼스 선택" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {campuses.map((campus) => (
+                      <SelectItem key={campus.id} value={campus.id}>
+                        {campus.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>조회 조건</Label>
+                <Select
+                  value={filterType}
+                  onValueChange={(value: "all" | "level" | "grade" | "teacher") => {
+                    setFilterType(value)
+                    setFilterValue("")
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="조회 조건 선택" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">전체</SelectItem>
+                    <SelectItem value="level">레벨</SelectItem>
+                    <SelectItem value="grade">학년</SelectItem>
+                    <SelectItem value="teacher">선생님</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>
+                  {filterType === "all" ? "조회 조건을 선택하세요" : 
+                   filterType === "level" ? "레벨 선택" :
+                   filterType === "grade" ? "학년 선택" :
+                   "선생님 선택"}
+                </Label>
+                {filterType === "all" ? (
+                  <Input disabled placeholder="조회 조건을 선택하세요" />
+                ) : filterType === "level" ? (
+                  <Select
+                    value={filterValue}
+                    onValueChange={setFilterValue}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="레벨 선택" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {levelCodes.map((code) => (
+                        <SelectItem key={code.id} value={code.id}>
+                          {code.value}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : filterType === "grade" ? (
+                  <Select
+                    value={filterValue}
+                    onValueChange={setFilterValue}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="학년 선택" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {gradeCodes.map((code) => (
+                        <SelectItem key={code.id} value={code.id}>
+                          {code.value}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Select
+                    value={filterValue}
+                    onValueChange={setFilterValue}
+                    disabled={availableTeachers.length === 0}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="선생님 선택" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableTeachers.map((teacher) => (
+                        <SelectItem key={teacher.id} value={teacher.id}>
+                          {teacher.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+              <div className="flex items-end gap-2">
+                <Button
+                  type="button"
+                  onClick={handleSearch}
+                  disabled={isLoading || !filterCampusId || (filterType !== "all" && !filterValue)}
+                >
+                  조회
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleReset}
+                  disabled={isLoading}
+                >
+                  전체
+                </Button>
+              </div>
+            </div>
+          </div>
           <Table>
             <TableHeader>
               <TableRow>
