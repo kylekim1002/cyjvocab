@@ -391,10 +391,38 @@ git push -u origin master
 - `-u origin main`: `origin` 원격 저장소의 `main` 브랜치에 푸시하고, 앞으로 이 브랜치를 기본으로 설정
 
 **처음 푸시하는 경우:**
-GitHub 로그인을 요청할 수 있습니다:
-1. 브라우저가 자동으로 열리거나
-2. 터미널에 로그인 안내가 나타납니다
-3. GitHub 계정으로 로그인하고 권한을 승인하세요
+GitHub는 더 이상 비밀번호 인증을 지원하지 않습니다. **Personal Access Token (PAT)**을 사용해야 합니다.
+
+#### Personal Access Token 생성 방법:
+
+1. **GitHub에서 토큰 생성:**
+   - [github.com](https://github.com) 로그인
+   - 우측 상단 프로필 아이콘 클릭 → **"Settings"** 클릭
+   - 왼쪽 메뉴 맨 아래 **"Developer settings"** 클릭
+   - **"Personal access tokens"** → **"Tokens (classic)"** 클릭
+   - **"Generate new token"** → **"Generate new token (classic)"** 클릭
+   - **Note**: `word-learning-lms-deployment` (원하는 이름)
+   - **Expiration**: 원하는 기간 선택 (예: 90 days 또는 No expiration)
+   - **Select scopes**: 다음 권한 체크:
+     - ✅ `repo` (전체 저장소 접근)
+   - **"Generate token"** 버튼 클릭
+   - ⚠️ **중요**: 토큰을 즉시 복사하세요! 다시 볼 수 없습니다!
+
+2. **토큰으로 푸시:**
+   ```bash
+   git push -u origin master
+   ```
+   
+   사용자명과 비밀번호를 요청하면:
+   - **Username**: GitHub 사용자명 입력 (예: `kylekim1002`)
+   - **Password**: 방금 생성한 **Personal Access Token** 입력 (비밀번호가 아님!)
+
+3. **또는 URL에 토큰 포함 (일회성):**
+   ```bash
+   git push https://토큰@github.com/kylekim1002/cyjvocab.git master
+   ```
+   
+   ⚠️ 이 방법은 명령어 히스토리에 토큰이 남을 수 있으므로 주의하세요!
 
 **성공 확인:**
 다음과 같은 메시지가 나타나면 성공:
@@ -467,14 +495,46 @@ git push -u origin main
 1. **Project Name**: 자동으로 채워짐 (변경 가능)
 2. **Framework Preset**: `Next.js` (자동 감지됨)
 3. **Root Directory**: `./` (기본값)
-4. **Build Command**: `prisma generate && next build` (자동 설정됨)
+4. **Build Command**: **중요!** 다음으로 설정:
+   ```
+   prisma generate && next build
+   ```
+   ⚠️ 만약 자동으로 설정되지 않았다면 수동으로 입력하세요!
 5. **Output Directory**: `.next` (기본값)
 6. **Install Command**: `npm install` (기본값)
+
+**⚠️ 중요: Build Command 확인**
+- `prisma generate && next build`가 정확히 입력되어 있는지 확인하세요
+- Prisma Client를 먼저 생성한 후 Next.js를 빌드해야 합니다
+
+### 6-4. Deploy 클릭 및 배포 실패 시 확인사항
+
+**Deploy 버튼 클릭 후:**
+
+배포가 실패하는 경우 다음을 확인하세요:
+
+1. **환경 변수 확인**
+   - 7단계에서 환경 변수를 설정했는지 확인
+   - 특히 `DATABASE_URL`, `NEXTAUTH_SECRET`이 필수입니다
+
+2. **빌드 로그 확인**
+   - 배포 페이지에서 "Build Logs" 섹션 클릭
+   - 에러 메시지 확인:
+     - `Environment variable not found: DATABASE_URL` → 환경 변수 누락
+     - `Prisma Client not generated` → Build Command 확인
+     - `Module not found` → 패키지 설치 문제
+
+3. **일반적인 해결 방법**
+   - 환경 변수를 먼저 설정한 후 다시 배포
+   - Build Command가 정확한지 확인
+   - 7단계로 이동하여 환경 변수 설정 완료 후 재배포
 
 **✅ 6단계 완료 체크:**
 - [ ] Vercel 계정 생성 완료
 - [ ] GitHub 저장소 연결 완료
 - [ ] 프로젝트 설정 확인 완료
+- [ ] Build Command 확인: `prisma generate && next build`
+- [ ] Deploy 클릭 (환경 변수 설정 전이면 실패할 수 있음 - 정상)
 
 ---
 
@@ -507,7 +567,8 @@ git push -u origin main
 
 **변수 4: NEXTAUTH_URL**
 - Key: `NEXTAUTH_URL`
-- Value: `https://your-project-name.vercel.app` (배포 후 자동 생성된 URL, 일단 임시로 입력)
+- Value: **일단 임시로** `https://your-project-name.vercel.app` 입력
+  - ⚠️ 나중에 실제 배포된 URL로 업데이트 필요 (8-3 단계 참고)
 - Environment: ✅ Production만 체크
 - **"Save"** 클릭
 
