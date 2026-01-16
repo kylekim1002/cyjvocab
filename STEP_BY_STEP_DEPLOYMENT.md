@@ -54,13 +54,21 @@ service_role key: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 ```
 
 4. **Database** 메뉴 클릭
-5. **Connection string** 섹션에서 **"URI"** 탭 클릭
-6. 연결 문자열을 복사 (비밀번호 부분은 `[YOUR-PASSWORD]`로 표시됨)
-7. 실제 비밀번호를 입력한 전체 연결 문자열을 메모장에 저장:
+5. **Connection string** 섹션에서 **"ORMs"** 탭 클릭
+6. **Tool** 드롭다운에서 **"Prisma"** 선택
+7. `.env.local` 탭에서 연결 문자열 확인:
+   - **Direct connection** (마이그레이션용): 포트 `5432`
+   - **Connection pooling** (일반 사용): 포트 `6543`, `pgbouncer=true`
+8. **Direct connection** 문자열을 복사하고 비밀번호를 입력:
 
 ```
-DATABASE_URL=postgresql://postgres:[여기에-1-2단계에서-설정한-비밀번호]@db.xxxxxxxxxxxxx.supabase.co:5432/postgres
+DATABASE_URL="postgresql://postgres.xxxxxxxxxxxxx:[비밀번호]@aws-1-ap-south-1.pooler.supabase.com:5432/postgres"
 ```
+
+**⚠️ 중요**: 
+- 마이그레이션(`prisma db push`)에는 **Direct connection** (포트 5432) 사용
+- 일반 애플리케이션 실행에는 **Connection pooling** (포트 6543) 사용 가능
+- IPv4 네트워크에서는 Pooler를 사용해야 할 수 있습니다
 
 **✅ 1단계 완료 체크:**
 - [ ] Supabase 프로젝트 생성 완료
@@ -154,6 +162,10 @@ NODE_ENV=development
 
 ### 4-1. 데이터베이스 마이그레이션
 
+**⚠️ 중요**: `.env.local` 파일의 `DATABASE_URL`이 Supabase 데이터베이스 URL로 설정되어 있는지 확인하세요!
+- 올바른 형식: `postgresql://postgres:비밀번호@db.xxxxxxxxxxxxx.supabase.co:5432/postgres`
+- ❌ 잘못된 형식: `postgresql://postgres:비밀번호@localhost:5432/...` (로컬 DB)
+
 터미널에서 프로젝트 폴더로 이동한 후:
 
 ```bash
@@ -164,9 +176,34 @@ npm run db:generate
 npm run db:push
 ```
 
-성공 메시지 확인:
-- `✔ Generated Prisma Client`
-- `Your database is now in sync with your Prisma schema.`
+**성공 메시지 확인:**
+
+정상적으로 실행되면 다음과 같은 메시지가 나타납니다:
+
+```
+Environment variables loaded from .env
+Prisma schema loaded from prisma/schema.prisma
+Datasource "db": PostgreSQL database "postgres", schema "public" at "db.xxxxxxxxxxxxx.supabase.co:5432"
+```
+
+그 다음 다음 중 하나의 메시지가 나타납니다:
+
+**케이스 1: 스키마가 새로 적용되는 경우**
+```
+✔ Generated Prisma Client (v5.22.0) to ./node_modules/@prisma/client in XXms
+Your database is now in sync with your Prisma schema.
+```
+
+**케이스 2: 이미 동기화되어 있는 경우**
+```
+The database is already in sync with the Prisma schema.
+✓ Generated Prisma Client (v5.22.0) to ./node_modules/@prisma/client in XXms
+```
+
+**⚠️ 주의사항:**
+- 만약 `localhost:5432`가 보이면 로컬 데이터베이스에 연결된 것입니다
+- `.env.local` 파일의 `DATABASE_URL`을 Supabase URL로 다시 확인하세요
+- Supabase URL은 `db.xxxxxxxxxxxxx.supabase.co:5432` 형식입니다
 
 ### 4-2. 시드 데이터 실행 (선택사항)
 
@@ -208,26 +245,200 @@ npm run dev
 
 ### 5-2. 코드 푸시
 
-터미널에서 프로젝트 폴더로 이동:
+터미널에서 프로젝트 폴더로 이동한 후 다음 단계를 순서대로 진행하세요.
+
+#### 5-2-1. Git 초기화 확인
+
+먼저 Git이 이미 초기화되어 있는지 확인합니다:
 
 ```bash
-# 1. Git 초기화 (이미 되어 있다면 스킵)
-git init
-
-# 2. 원격 저장소 추가 (GitHub에서 제공하는 URL 사용)
-git remote add origin https://github.com/사용자명/word-learning-lms.git
-
-# 3. 모든 파일 추가
-git add .
-
-# 4. 커밋
-git commit -m "Initial commit: 배포 준비 완료"
-
-# 5. GitHub에 푸시
-git push -u origin main
-# 또는 master 브랜치를 사용한다면:
-# git push -u origin master
+git status
 ```
+
+**결과 확인:**
+- ✅ **"On branch master"** 또는 **"On branch main"** 메시지가 보이면 → 이미 초기화됨, 다음 단계로 진행
+- ❌ **"fatal: not a git repository"** 에러가 나면 → 아래 명령어로 초기화 필요:
+
+```bash
+git init
+```
+
+초기화 후 다음 메시지가 나타납니다:
+```
+Initialized empty Git repository in /경로/단어시험/.git/
+```
+
+#### 5-2-2. 원격 저장소 추가
+
+GitHub에서 생성한 저장소의 URL을 확인합니다.
+
+**GitHub 저장소 URL 찾는 방법:**
+1. GitHub에서 방금 만든 저장소 페이지로 이동
+2. 초록색 **"Code"** 버튼 클릭
+3. **"HTTPS"** 탭에서 URL 복사
+   - 예: `https://github.com/사용자명/word-learning-lms.git`
+
+**원격 저장소 추가:**
+
+```bash
+git remote add origin https://github.com/사용자명/word-learning-lms.git
+```
+
+**⚠️ 주의사항:**
+- `사용자명`을 실제 GitHub 사용자명으로 변경하세요
+- `word-learning-lms`를 실제 저장소 이름으로 변경하세요
+- 이미 원격 저장소가 설정되어 있다면 에러가 발생합니다:
+  ```
+  error: remote origin already exists.
+  ```
+  이 경우 다음 명령어로 기존 원격 저장소를 확인하거나 변경:
+  ```bash
+  # 기존 원격 저장소 확인
+  git remote -v
+  
+  # 기존 원격 저장소 제거 후 다시 추가
+  git remote remove origin
+  git remote add origin https://github.com/사용자명/word-learning-lms.git
+  ```
+
+**성공 확인:**
+```bash
+git remote -v
+```
+
+다음과 같은 출력이 나타나면 성공:
+```
+origin  https://github.com/사용자명/word-learning-lms.git (fetch)
+origin  https://github.com/사용자명/word-learning-lms.git (push)
+```
+
+#### 5-2-3. 모든 파일 추가
+
+변경된 파일들을 Git에 추가합니다:
+
+```bash
+git add .
+```
+
+**이 명령어의 의미:**
+- `.` (점)은 현재 폴더의 모든 파일을 의미합니다
+- `git add .`는 모든 변경사항을 스테이징 영역에 추가합니다
+
+**결과 확인:**
+```bash
+git status
+```
+
+다음과 같은 메시지가 보이면 성공:
+```
+Changes to be committed:
+  (use "git restore --staged <file>..." to unstage)
+        new file:   파일명1
+        modified:   파일명2
+        ...
+```
+
+**⚠️ 주의사항:**
+- `.env`, `.env.local` 같은 환경 변수 파일은 **절대 푸시하지 마세요!**
+- `.gitignore` 파일에 이미 설정되어 있어야 합니다
+- 만약 환경 변수 파일이 추가되려고 하면 `.gitignore`를 확인하세요
+
+#### 5-2-4. 커밋 생성
+
+변경사항을 커밋으로 저장합니다:
+
+```bash
+git commit -m "Initial commit: 배포 준비 완료"
+```
+
+**이 명령어의 의미:**
+- `commit`: 변경사항을 저장소에 기록
+- `-m "메시지"`: 커밋 메시지를 지정
+
+**결과 확인:**
+다음과 같은 메시지가 나타나면 성공:
+```
+[master (또는 main) xxxxxxx] Initial commit: 배포 준비 완료
+ X files changed, XXX insertions(+)
+```
+
+**다른 커밋 메시지 예시:**
+```bash
+git commit -m "프로젝트 초기 설정 및 Supabase 연동 완료"
+```
+
+#### 5-2-5. GitHub에 푸시
+
+로컬 저장소의 코드를 GitHub에 업로드합니다:
+
+**먼저 현재 브랜치 확인:**
+```bash
+git branch
+```
+
+**main 브랜치인 경우:**
+```bash
+git push -u origin main
+```
+
+**master 브랜치인 경우:**
+```bash
+git push -u origin master
+```
+
+**이 명령어의 의미:**
+- `push`: 로컬 변경사항을 원격 저장소에 업로드
+- `-u origin main`: `origin` 원격 저장소의 `main` 브랜치에 푸시하고, 앞으로 이 브랜치를 기본으로 설정
+
+**처음 푸시하는 경우:**
+GitHub 로그인을 요청할 수 있습니다:
+1. 브라우저가 자동으로 열리거나
+2. 터미널에 로그인 안내가 나타납니다
+3. GitHub 계정으로 로그인하고 권한을 승인하세요
+
+**성공 확인:**
+다음과 같은 메시지가 나타나면 성공:
+```
+Enumerating objects: XX, done.
+Counting objects: 100% (XX/XX), done.
+Delta compression using up to X threads
+Compressing objects: 100% (XX/XX), done.
+Writing objects: 100% (XX/XX), XXX KB | XXX KB/s, done.
+Total XX (delta X), reused 0 (delta 0), pack-reused 0
+To https://github.com/사용자명/word-learning-lms.git
+ * [new branch]      main -> main
+Branch 'main' set up to track remote branch 'main' from 'origin'.
+```
+
+**에러 발생 시:**
+
+**에러 1: "Authentication failed"**
+→ GitHub 로그인이 필요합니다. 브라우저에서 로그인하거나 Personal Access Token을 사용하세요.
+
+**에러 2: "Permission denied"**
+→ 저장소에 대한 권한이 없습니다. 저장소 소유자 확인 또는 권한 요청이 필요합니다.
+
+**에러 3: "Updates were rejected"**
+→ 원격 저장소에 이미 코드가 있는 경우:
+```bash
+# 원격 저장소의 변경사항을 먼저 가져오기
+git pull origin main --allow-unrelated-histories
+
+# 충돌 해결 후 다시 푸시
+git push -u origin main
+```
+
+#### 5-2-6. GitHub에서 확인
+
+1. 브라우저에서 GitHub 저장소 페이지로 이동
+2. 파일 목록이 보이면 성공!
+3. 모든 파일이 업로드되었는지 확인하세요
+
+**✅ 확인 사항:**
+- [ ] `package.json` 파일이 보임
+- [ ] `prisma` 폴더가 보임
+- [ ] `app` 폴더가 보임
+- [ ] `.env` 또는 `.env.local` 파일은 **보이지 않아야 함** (보안상 중요!)
 
 **✅ 5단계 완료 체크:**
 - [ ] GitHub 저장소 생성 완료
