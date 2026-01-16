@@ -99,23 +99,40 @@ export async function POST(
 
     // 점수 계산 (TYPE_A, TYPE_B인 경우)
     let score = null
+    const payload = studySession.payloadJson as any
+    const phase = payload.phase || "test"
+    
     if (module.type === "TYPE_A" || module.type === "TYPE_B") {
-      const payload = studySession.payloadJson as any
       // 요청에서 온 quizAnswers를 우선 사용, 없으면 세션의 quizAnswers 사용
       const quizAnswers = requestQuizAnswers || payload.quizAnswers || {}
       let correctCount = 0
+      let totalItems = 0
 
-      module.items.forEach((item, idx) => {
-        if (!item.payloadJson) return
-        const payload = item.payloadJson as any
-        const correctIndex = payload.correct_index
-        if (quizAnswers[idx] === correctIndex) {
-          correctCount++
-        }
-      })
+      // 최종테스트인 경우 finalTestItems 사용
+      if (phase === "finaltest" && payload.finalTestItems) {
+        totalItems = payload.finalTestItems.length
+        payload.finalTestItems.forEach((item: any, idx: number) => {
+          if (!item.payloadJson) return
+          const correctIndex = item.payloadJson.correct_index
+          if (quizAnswers[idx] === correctIndex) {
+            correctCount++
+          }
+        })
+      } else {
+        // 일반 테스트인 경우 module.items 사용
+        totalItems = module.items.length
+        module.items.forEach((item, idx) => {
+          if (!item.payloadJson) return
+          const itemPayload = item.payloadJson as any
+          const correctIndex = itemPayload.correct_index
+          if (quizAnswers[idx] === correctIndex) {
+            correctCount++
+          }
+        })
+      }
 
-      score = Math.round((correctCount / module.items.length) * 100)
-      console.log("Score calculated:", { correctCount, total: module.items.length, score })
+      score = totalItems > 0 ? Math.round((correctCount / totalItems) * 100) : 0
+      console.log("Score calculated:", { correctCount, total: totalItems, score, phase })
     }
 
     // 세션 완료 처리
@@ -168,13 +185,17 @@ export async function POST(
       })
 
       if (assignment) {
-        // score_log에 기록 (복습 여부 구분)
+        // score_log에 기록 (복습 여부 및 최종테스트 여부 구분)
+        const activityType = phase === "finaltest" 
+          ? (isReview ? "FINAL_TEST_REVIEW" : "FINAL_TEST")
+          : (isReview ? "REVIEW" : "LEARNING")
+        
         await prisma.scoreLog.create({
           data: {
             studentId: session.user.studentId,
             campusId: assignment.class.campusId,
             classId: assignment.classId,
-            activityType: isReview ? "REVIEW" : "LEARNING",
+            activityType,
             score,
           },
         })

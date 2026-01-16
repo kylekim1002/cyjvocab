@@ -38,7 +38,7 @@ interface LearningContentProps {
   progress: Progress | null
   isReviewMode?: boolean
   completedSession?: any
-  phase?: string // wordlist, memorization, test
+  phase?: string // wordlist, memorization, test, finaltest
 }
 
 export function LearningContent({
@@ -63,6 +63,7 @@ export function LearningContent({
   const [wordlistMaxIndex, setWordlistMaxIndex] = useState<number>(-1)
   const [memorizeMaxIndex, setMemorizeMaxIndex] = useState<number>(-1)
   const [showMeaning, setShowMeaning] = useState<boolean>(false) // 암기학습용 토글
+  const [finalTestItems, setFinalTestItems] = useState<LearningItem[]>([]) // 최종테스트용 아이템
 
   useEffect(() => {
     console.log("LearningContent useEffect", { inProgressSession, progress, sessionId, isReviewMode, completedSession, phase })
@@ -83,8 +84,8 @@ export function LearningContent({
       return
     }
     
-    // 테스트 단계에서만 세션 체크
-    if (phase === "test") {
+    // 테스트/최종테스트 단계에서만 세션 체크
+    if (phase === "test" || phase === "finaltest") {
       // 진행 중인 세션이 있으면 삭제하고 새로 시작 (완료된 학습도 포함)
       if (inProgressSession) {
         // 기존 세션 삭제
@@ -106,6 +107,34 @@ export function LearningContent({
       if (!sessionId) {
         startNewSession()
       }
+      
+      // 최종테스트인 경우 세션에서 finalTestItems 가져오기
+      if (phase === "finaltest") {
+        const loadFinalTestItems = async () => {
+          if (inProgressSession?.payloadJson) {
+            const payload = inProgressSession.payloadJson as any
+            if (payload.finalTestItems) {
+              setFinalTestItems(payload.finalTestItems)
+              return
+            }
+          }
+          if (sessionId) {
+            try {
+              const res = await fetch(`/api/student/sessions/${sessionId}`)
+              if (res.ok) {
+                const data = await res.json()
+                const payload = data.payloadJson as any
+                if (payload?.finalTestItems) {
+                  setFinalTestItems(payload.finalTestItems)
+                }
+              }
+            } catch (error) {
+              console.error("Failed to load final test items:", error)
+            }
+          }
+        }
+        loadFinalTestItems()
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inProgressSession, progress, isReviewMode, completedSession, phase])
@@ -115,7 +144,13 @@ export function LearningContent({
     try {
       const response = await fetch(
         `/api/student/assignments/${assignmentId}/modules/${module.id}/start`,
-        { method: "POST" }
+        { 
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ phase }),
+        }
       )
       
       if (!response.ok) {
@@ -126,6 +161,22 @@ export function LearningContent({
       const data = await response.json()
       console.log("New session started:", data.sessionId)
       setSessionId(data.sessionId)
+      
+      // 최종테스트인 경우 세션에서 finalTestItems 가져오기
+      if (phase === "finaltest" && data.sessionId) {
+        try {
+          const sessionResponse = await fetch(`/api/student/sessions/${data.sessionId}`)
+          if (sessionResponse.ok) {
+            const sessionData = await sessionResponse.json()
+            const payload = sessionData.payloadJson as any
+            if (payload?.finalTestItems) {
+              setFinalTestItems(payload.finalTestItems)
+            }
+          }
+        } catch (error) {
+          console.error("Failed to load final test items:", error)
+        }
+      }
     } catch (error: any) {
       console.error("Start session error:", error)
       toast({
@@ -170,8 +221,8 @@ export function LearningContent({
   }
 
   const handleComplete = async () => {
-    // 테스트 단계에서만 완료 처리
-    if (phase !== "test") {
+    // 테스트/최종테스트 단계에서만 완료 처리
+    if (phase !== "test" && phase !== "finaltest") {
       toast({
         title: "알림",
         description: "테스트 단계에서만 완료할 수 있습니다.",
@@ -423,8 +474,12 @@ export function LearningContent({
     return item.payloadJson[`choice${correctIndex + 1}`] || ""
   }
 
-  const currentItem = module.items[currentIndex]
-  const isLast = currentIndex === module.items.length - 1
+  // 최종테스트인 경우 finalTestItems 사용, 아니면 module.items 사용
+  const displayItems = phase === "finaltest" && finalTestItems.length > 0 
+    ? finalTestItems 
+    : module.items
+  const currentItem = displayItems[currentIndex]
+  const isLast = currentIndex === displayItems.length - 1
 
   // payloadJson이 없거나 구조가 잘못된 경우 처리
   if (!currentItem || !currentItem.payloadJson) {
@@ -496,7 +551,7 @@ export function LearningContent({
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            {module.items.map((item, idx) => {
+            {(phase === "finaltest" && finalTestItems.length > 0 ? finalTestItems : module.items).map((item, idx) => {
               const correctIndex = getCorrectAnswer(item)
               const studentAnswer = completedAnswers[idx]
               const isCorrectAnswer = studentAnswer === correctIndex
@@ -576,6 +631,7 @@ export function LearningContent({
           {phase === "wordlist" && <span className="ml-2 text-sm text-muted-foreground">(단어목록)</span>}
           {phase === "memorization" && <span className="ml-2 text-sm text-muted-foreground">(암기학습)</span>}
           {phase === "test" && <span className="ml-2 text-sm text-muted-foreground">(테스트)</span>}
+          {phase === "finaltest" && <span className="ml-2 text-sm text-muted-foreground">(최종테스트)</span>}
         </h1>
       </div>
 
@@ -641,7 +697,7 @@ export function LearningContent({
                 )}
               </div>
             </div>
-          ) : phase === "test" ? (
+          ) : phase === "test" || phase === "finaltest" ? (
             // 테스트 단계: 퀴즈 모드
             module.type === "TYPE_A" ? (
               <div className="space-y-4">
@@ -737,10 +793,10 @@ export function LearningContent({
               이전
             </Button>
             <span className="text-sm text-muted-foreground">
-              {currentIndex + 1} / {module.items.length}
+              {currentIndex + 1} / {displayItems.length}
             </span>
             {isLast ? (
-              phase === "test" ? (
+              phase === "test" || phase === "finaltest" ? (
                 <Button 
                   onClick={() => {
                     console.log("Complete button clicked", { sessionId, inProgressSession, currentIndex, moduleItemsLength: module.items.length })
