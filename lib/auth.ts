@@ -78,7 +78,7 @@ export async function verifyCredentials(
       campusId: user.campusId,
       studentId: user.student?.id,
       studentStatus: user.student?.status,
-      hasActiveClass: user.student?.studentClasses.length > 0,
+      hasActiveClass: (user.student?.studentClasses?.length ?? 0) > 0,
     }
   } catch (error: any) {
     // 데이터베이스 연결 실패 시 에러 로깅

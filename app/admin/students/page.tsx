@@ -1,5 +1,5 @@
 import { getServerSession } from "next-auth"
-import { authOptions } from "../../api/auth/[...nextauth]/route"
+import { authOptions } from "@/lib/auth-options"
 import { StudentManagement } from "@/components/admin/student-management"
 import { prisma } from "@/lib/prisma"
 

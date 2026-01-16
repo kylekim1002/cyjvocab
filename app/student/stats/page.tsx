@@ -1,5 +1,5 @@
 import { getServerSession } from "next-auth"
-import { authOptions } from "../../api/auth/[...nextauth]/route"
+import { authOptions } from "@/lib/auth-options"
 import { prisma } from "@/lib/prisma"
 import { StudentStats } from "@/components/student/student-stats"
 
@@ -63,7 +63,8 @@ export default async function StatsPage() {
 
     // 정답 개수 계산
     session.module.items.forEach((item, idx) => {
-      const correctIndex = item.payloadJson.correct_index
+      const payload = item.payloadJson as any
+      const correctIndex = payload.correct_index
       if (quizAnswers[idx] === correctIndex) {
         correctCount++
       }

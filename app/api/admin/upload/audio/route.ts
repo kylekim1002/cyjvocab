@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
-import { authOptions } from "../../../auth/[...nextauth]/route"
+import { authOptions } from "@/lib/auth-options"
 import { supabase, STORAGE_BUCKET, isSupabaseConfigured } from "@/lib/supabase"
 import { writeFile, mkdir } from "fs/promises"
 import { join } from "path"

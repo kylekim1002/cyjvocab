@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
-import { authOptions } from "../../../../../auth/[...nextauth]/route"
+import { authOptions } from "@/lib/auth-options"
 import { prisma } from "@/lib/prisma"
 
 // DELETE: 특정 날짜에서 특정 학습 제거

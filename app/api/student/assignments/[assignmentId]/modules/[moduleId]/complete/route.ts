@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
-import { authOptions } from "../../../../../../auth/[...nextauth]/route"
+import { authOptions } from "@/lib/auth-options"
 import { prisma } from "@/lib/prisma"
 
 export async function POST(
@@ -106,7 +106,9 @@ export async function POST(
       let correctCount = 0
 
       module.items.forEach((item, idx) => {
-        const correctIndex = item.payloadJson.correct_index
+        if (!item.payloadJson) return
+        const payload = item.payloadJson as any
+        const correctIndex = payload.correct_index
         if (quizAnswers[idx] === correctIndex) {
           correctCount++
         }

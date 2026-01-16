@@ -72,7 +72,7 @@ async function main() {
     const flashcardModule = await prisma.learningModule.create({
       data: {
         title: '기초 단어 1',
-        type: 'FLASHCARD' as const,
+        type: 'TYPE_A' as const,
         levelId: level1Code.id,
         gradeId: grade1Code.id,
         memo: '기초 단어 학습',
@@ -111,7 +111,7 @@ async function main() {
     const quizModule = await prisma.learningModule.create({
       data: {
         title: '기초 퀴즈 1',
-        type: 'QUIZ' as const,
+        type: 'TYPE_B' as const,
         levelId: level1Code.id,
         gradeId: grade1Code.id,
         memo: '기초 퀴즈',
