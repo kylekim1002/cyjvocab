@@ -270,8 +270,7 @@ export function ClassManagement({
     
     // 상태 업데이트를 먼저 수행
     setSelectedStudentIds([])
-    const campusId = 'id' in cls.campus ? cls.campus.id : (cls.campus as any).id
-    setStudentFilter({ name: "", gradeId: "all", levelId: "all", campusId: campusId || "" })
+    setStudentFilter({ name: "", gradeId: "all", levelId: "all", campusId: "" })
     setSelectedClass(cls)
     
     // 다이얼로그 열기
@@ -298,22 +297,18 @@ export function ClassManagement({
   // 배치 가능한 학생 조회
   const loadAvailableStudents = async (cls: Class) => {
     try {
-      // campus.id 추출 (타입 안전하게)
-      const campusId = 'id' in cls.campus ? cls.campus.id : (cls.campus as any).id
-      if (!campusId) {
-        console.error("Class campus ID is missing:", cls)
+      // 필터에서 캠퍼스 ID 확인 (필수)
+      if (!studentFilter.campusId) {
         toast({
           title: "오류",
-          description: "클래스 캠퍼스 정보가 없습니다.",
+          description: "캠퍼스를 선택해주세요.",
           variant: "destructive",
         })
         return
       }
 
-      // 필터에서 캠퍼스 ID 사용 (없으면 클래스의 캠퍼스 ID 사용)
-      const filterCampusId = studentFilter.campusId || campusId
       const params = new URLSearchParams({
-        campus_id: filterCampusId,
+        campus_id: studentFilter.campusId,
       })
       
       if (studentFilter.name) params.append("name", studentFilter.name)
