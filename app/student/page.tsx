@@ -157,6 +157,7 @@ export default async function StudentHomePage() {
         moduleId: true,
         status: true,
         score: true,
+        payloadJson: true,
       },
     })
 
