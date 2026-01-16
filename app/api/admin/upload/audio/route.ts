@@ -41,46 +41,51 @@ export async function POST(request: Request) {
       )
     }
 
-    // Supabase가 설정되어 있으면 Supabase Storage 사용, 없으면 로컬 파일 시스템 사용
+    // Supabase가 설정되어 있으면 Supabase Storage 사용 시도, 실패 시 로컬 파일 시스템으로 폴백
     if (isSupabaseConfigured() && supabase) {
-      // Supabase Storage에 업로드
-      const timestamp = Date.now()
-      const fileName = `${timestamp}_${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`
-      const filePath = `audio/${fileName}`
+      try {
+        // Supabase Storage에 업로드
+        const timestamp = Date.now()
+        const fileName = `${timestamp}_${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`
+        const filePath = `audio/${fileName}`
 
-      const bytes = await file.arrayBuffer()
-      const buffer = Buffer.from(bytes)
+        const bytes = await file.arrayBuffer()
+        const buffer = Buffer.from(bytes)
 
-      // Supabase Storage에 업로드
-      const { data, error: uploadError } = await supabase.storage
-        .from(STORAGE_BUCKET)
-        .upload(filePath, buffer, {
-          contentType: file.type,
-          upsert: false,
-        })
+        // Supabase Storage에 업로드
+        const { data, error: uploadError } = await supabase.storage
+          .from(STORAGE_BUCKET)
+          .upload(filePath, buffer, {
+            contentType: file.type,
+            upsert: false,
+          })
 
-      if (uploadError) {
-        console.error("Supabase upload error:", uploadError)
-        return NextResponse.json(
-          { error: `파일 업로드에 실패했습니다: ${uploadError.message}` },
-          { status: 500 }
-        )
+        if (uploadError) {
+          console.error("Supabase upload error:", uploadError)
+          // Supabase 업로드 실패 시 로컬 파일 시스템으로 폴백
+          console.log("Falling back to local file system storage")
+          throw uploadError
+        }
+
+        // 공개 URL 가져오기
+        const { data: urlData } = supabase.storage
+          .from(STORAGE_BUCKET)
+          .getPublicUrl(filePath)
+
+        if (!urlData?.publicUrl) {
+          throw new Error("파일 URL을 가져올 수 없습니다.")
+        }
+
+        return NextResponse.json({ url: urlData.publicUrl })
+      } catch (supabaseError: any) {
+        // Supabase 업로드 실패 시 로컬 파일 시스템으로 폴백
+        console.warn("Supabase upload failed, using local storage:", supabaseError.message)
+        // 아래 로컬 저장 로직으로 계속 진행
       }
-
-      // 공개 URL 가져오기
-      const { data: urlData } = supabase.storage
-        .from(STORAGE_BUCKET)
-        .getPublicUrl(filePath)
-
-      if (!urlData?.publicUrl) {
-        return NextResponse.json(
-          { error: "파일 URL을 가져올 수 없습니다." },
-          { status: 500 }
-        )
-      }
-
-      return NextResponse.json({ url: urlData.publicUrl })
-    } else {
+    }
+    
+    // 로컬 파일 시스템에 저장 (Supabase가 없거나 업로드 실패한 경우)
+    {
       // 로컬 개발 환경: 파일 시스템에 저장
       const uploadDir = join(process.cwd(), "public", "uploads", "audio")
       
