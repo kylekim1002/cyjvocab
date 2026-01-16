@@ -55,11 +55,8 @@ export async function verifyCredentials(
         return null
       }
 
-      // 클래스 배정 확인
-      if (user.student.studentClasses.length === 0) {
-        await recordLoginAttempt(username, false, ipAddress, user.id)
-        return null
-      }
+      // 클래스 배정 확인은 제거 (학생이 클래스 배정 전에도 로그인 가능하도록)
+      // 클래스 배정이 없어도 로그인은 가능하지만, 학습 기능은 제한됨
     }
 
     const isValid = await bcrypt.compare(password, user.password)
@@ -133,11 +130,8 @@ export async function verifyAutoLoginToken(
       return null
     }
 
-    // 클래스 배정 확인
-    if (student.studentClasses.length === 0) {
-      console.log("Student has no active classes")
-      return null
-    }
+    // 클래스 배정 확인은 제거 (학생이 클래스 배정 전에도 자동 로그인 가능하도록)
+    // 클래스 배정이 없어도 로그인은 가능하지만, 학습 기능은 제한됨
 
     if (!student.user) {
       console.log("Student has no user record")

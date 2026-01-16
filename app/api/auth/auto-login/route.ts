@@ -29,13 +29,8 @@ export async function POST(request: Request) {
       )
     }
 
-    // 클래스 배정 확인
-    if (!user.hasActiveClass) {
-      return NextResponse.json(
-        { error: "NO_CLASS" },
-        { status: 403 }
-      )
-    }
+    // 클래스 배정 확인은 제거 (학생이 클래스 배정 전에도 자동 로그인 가능하도록)
+    // 클래스 배정이 없어도 로그인은 가능하지만, 학습 기능은 제한됨
 
     return NextResponse.json({
       username: user.username,
