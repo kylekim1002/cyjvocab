@@ -1177,7 +1177,6 @@ export function ClassManagement({
                           <TableCell>{student.campus?.name || "-"}</TableCell>
                           <TableCell>
                             <span className="font-medium">
-                              {student.campus?.name ? `[${student.campus.name}] ` : ""}
                               {student.name}
                             </span>
                           </TableCell>
