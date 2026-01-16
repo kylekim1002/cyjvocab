@@ -67,7 +67,7 @@ export function ClassManagement({
   const [availableStudents, setAvailableStudents] = useState<any[]>([])
   const [assignedStudents, setAssignedStudents] = useState<any[]>([])
   const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([])
-  const [studentFilter, setStudentFilter] = useState({ name: "", gradeId: "all", levelId: "all" })
+  const [studentFilter, setStudentFilter] = useState({ name: "", gradeId: "all", levelId: "all", campusId: "" })
   
   // 학습 등록 관련 상태
   const [levels, setLevels] = useState<Code[]>([])
@@ -270,7 +270,8 @@ export function ClassManagement({
     
     // 상태 업데이트를 먼저 수행
     setSelectedStudentIds([])
-    setStudentFilter({ name: "", gradeId: "all", levelId: "all" })
+    const campusId = 'id' in cls.campus ? cls.campus.id : (cls.campus as any).id
+    setStudentFilter({ name: "", gradeId: "all", levelId: "all", campusId: campusId || "" })
     setSelectedClass(cls)
     
     // 다이얼로그 열기
@@ -309,8 +310,10 @@ export function ClassManagement({
         return
       }
 
+      // 필터에서 캠퍼스 ID 사용 (없으면 클래스의 캠퍼스 ID 사용)
+      const filterCampusId = studentFilter.campusId || campusId
       const params = new URLSearchParams({
-        campus_id: campusId,
+        campus_id: filterCampusId,
       })
       
       if (studentFilter.name) params.append("name", studentFilter.name)
@@ -1056,7 +1059,27 @@ export function ClassManagement({
           {selectedClass && (
             <div className="space-y-4">
               {/* 필터 */}
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-4 gap-4">
+                <div>
+                  <Label>캠퍼스</Label>
+                  <Select
+                    value={studentFilter.campusId}
+                    onValueChange={(v) => {
+                      setStudentFilter({ ...studentFilter, campusId: v })
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="캠퍼스 선택" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {campuses.map((campus) => (
+                        <SelectItem key={campus.id} value={campus.id}>
+                          {campus.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
                 <div>
                   <Label>학생명</Label>
                   <Input
@@ -1115,7 +1138,7 @@ export function ClassManagement({
                   </Select>
                 </div>
               </div>
-              <Button type="button" onClick={() => loadAvailableStudents(selectedClass)}>조회</Button>
+              <Button type="button" onClick={() => loadAvailableStudents(selectedClass)} disabled={!studentFilter.campusId}>조회</Button>
 
               {/* 학생 목록 */}
               <div className="border rounded-lg p-4 max-h-96 overflow-y-auto">
@@ -1123,6 +1146,7 @@ export function ClassManagement({
                   <TableHeader>
                     <TableRow>
                       <TableHead className="w-12"></TableHead>
+                      <TableHead>캠퍼스</TableHead>
                       <TableHead>이름</TableHead>
                       <TableHead>아이디</TableHead>
                       <TableHead>학년</TableHead>
@@ -1150,7 +1174,13 @@ export function ClassManagement({
                               disabled={isAssigned}
                             />
                           </TableCell>
-                          <TableCell>{student.name}</TableCell>
+                          <TableCell>{student.campus?.name || "-"}</TableCell>
+                          <TableCell>
+                            <span className="font-medium">
+                              {student.campus?.name ? `[${student.campus.name}] ` : ""}
+                              {student.name}
+                            </span>
+                          </TableCell>
                           <TableCell>{student.username}</TableCell>
                           <TableCell>{student.grade?.value || "-"}</TableCell>
                           <TableCell>{student.level?.value || "-"}</TableCell>
