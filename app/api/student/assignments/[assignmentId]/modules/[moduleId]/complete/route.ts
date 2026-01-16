@@ -111,31 +111,49 @@ export async function POST(
       // 최종테스트인 경우 finalTestItems 사용
       if (phase === "finaltest" && payload.finalTestItems) {
         totalItems = payload.finalTestItems.length
+        
+        // quizAnswers를 정규화 (키를 숫자로 변환)
+        const normalizedAnswers: Record<number, number> = {}
+        Object.keys(quizAnswers).forEach(key => {
+          const numKey = Number(key)
+          if (!isNaN(numKey)) {
+            normalizedAnswers[numKey] = Number(quizAnswers[key as keyof typeof quizAnswers])
+          }
+        })
+        
         payload.finalTestItems.forEach((item: any, idx: number) => {
           if (!item.payloadJson) {
             console.log(`Final test item ${idx}: no payloadJson`)
             return
           }
-          const correctIndex = item.payloadJson.correct_index
-          // quizAnswers의 키가 문자열일 수도 있으므로 처리
-          const studentAnswer = quizAnswers[idx] ?? quizAnswers[String(idx)]
+          const correctIndex = Number(item.payloadJson.correct_index)
+          const studentAnswer = normalizedAnswers[idx]
           
           console.log(`Final test item ${idx}: correctIndex=${correctIndex}, studentAnswer=${studentAnswer}, match=${studentAnswer === correctIndex}`)
           
-          if (studentAnswer !== undefined && studentAnswer !== null && studentAnswer === correctIndex) {
+          if (studentAnswer !== undefined && studentAnswer !== null && Number(studentAnswer) === correctIndex) {
             correctCount++
           }
         })
       } else {
         // 일반 테스트인 경우 module.items 사용
         totalItems = module.items.length
+        
+        // quizAnswers를 정규화 (키를 숫자로 변환)
+        const normalizedAnswers: Record<number, number> = {}
+        Object.keys(quizAnswers).forEach(key => {
+          const numKey = Number(key)
+          if (!isNaN(numKey)) {
+            normalizedAnswers[numKey] = Number(quizAnswers[key as keyof typeof quizAnswers])
+          }
+        })
+        
         module.items.forEach((item, idx) => {
           if (!item.payloadJson) return
           const itemPayload = item.payloadJson as any
-          const correctIndex = itemPayload.correct_index
-          // quizAnswers의 키가 문자열일 수도 있으므로 처리
-          const studentAnswer = quizAnswers[idx] ?? quizAnswers[String(idx)]
-          if (studentAnswer !== undefined && studentAnswer !== null && studentAnswer === correctIndex) {
+          const correctIndex = Number(itemPayload.correct_index)
+          const studentAnswer = normalizedAnswers[idx]
+          if (studentAnswer !== undefined && studentAnswer !== null && Number(studentAnswer) === correctIndex) {
             correctCount++
           }
         })
