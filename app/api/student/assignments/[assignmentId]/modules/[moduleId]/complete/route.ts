@@ -112,9 +112,17 @@ export async function POST(
       if (phase === "finaltest" && payload.finalTestItems) {
         totalItems = payload.finalTestItems.length
         payload.finalTestItems.forEach((item: any, idx: number) => {
-          if (!item.payloadJson) return
+          if (!item.payloadJson) {
+            console.log(`Final test item ${idx}: no payloadJson`)
+            return
+          }
           const correctIndex = item.payloadJson.correct_index
-          if (quizAnswers[idx] === correctIndex) {
+          // quizAnswers의 키가 문자열일 수도 있으므로 처리
+          const studentAnswer = quizAnswers[idx] ?? quizAnswers[String(idx)]
+          
+          console.log(`Final test item ${idx}: correctIndex=${correctIndex}, studentAnswer=${studentAnswer}, match=${studentAnswer === correctIndex}`)
+          
+          if (studentAnswer !== undefined && studentAnswer !== null && studentAnswer === correctIndex) {
             correctCount++
           }
         })
@@ -125,14 +133,23 @@ export async function POST(
           if (!item.payloadJson) return
           const itemPayload = item.payloadJson as any
           const correctIndex = itemPayload.correct_index
-          if (quizAnswers[idx] === correctIndex) {
+          // quizAnswers의 키가 문자열일 수도 있으므로 처리
+          const studentAnswer = quizAnswers[idx] ?? quizAnswers[String(idx)]
+          if (studentAnswer !== undefined && studentAnswer !== null && studentAnswer === correctIndex) {
             correctCount++
           }
         })
       }
 
       score = totalItems > 0 ? Math.round((correctCount / totalItems) * 100) : 0
-      console.log("Score calculated:", { correctCount, total: totalItems, score, phase })
+      console.log("Score calculated:", { 
+        correctCount, 
+        total: totalItems, 
+        score, 
+        phase,
+        quizAnswersKeys: Object.keys(quizAnswers),
+        quizAnswers: quizAnswers
+      })
     }
 
     // 세션 완료 처리
