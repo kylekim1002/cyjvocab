@@ -130,6 +130,20 @@ export function LearningContent({
             const payload = inProgressSession.payloadJson as any
             if (payload.finalTestItems) {
               setFinalTestItems(payload.finalTestItems)
+              // 기존 quizAnswers를 item.id 기반으로 변환
+              if (payload.quizAnswers) {
+                const convertedAnswers: Record<string | number, number> = {}
+                payload.finalTestItems.forEach((item: any, idx: number) => {
+                  const itemId = item.id || idx
+                  // 기존 답안이 인덱스 기반이면 item.id로 변환
+                  if (payload.quizAnswers[idx] !== undefined) {
+                    convertedAnswers[itemId] = payload.quizAnswers[idx]
+                  } else if (payload.quizAnswers[itemId] !== undefined) {
+                    convertedAnswers[itemId] = payload.quizAnswers[itemId]
+                  }
+                })
+                setQuizAnswers(convertedAnswers)
+              }
               return
             }
           }
@@ -141,6 +155,19 @@ export function LearningContent({
                 const payload = data.payloadJson as any
                 if (payload?.finalTestItems) {
                   setFinalTestItems(payload.finalTestItems)
+                  // 기존 quizAnswers를 item.id 기반으로 변환
+                  if (payload.quizAnswers) {
+                    const convertedAnswers: Record<string | number, number> = {}
+                    payload.finalTestItems.forEach((item: any, idx: number) => {
+                      const itemId = item.id || idx
+                      if (payload.quizAnswers[idx] !== undefined) {
+                        convertedAnswers[itemId] = payload.quizAnswers[idx]
+                      } else if (payload.quizAnswers[itemId] !== undefined) {
+                        convertedAnswers[itemId] = payload.quizAnswers[itemId]
+                      }
+                    })
+                    setQuizAnswers(convertedAnswers)
+                  }
                 }
               }
             } catch (error) {
@@ -149,6 +176,14 @@ export function LearningContent({
           }
         }
         loadFinalTestItems()
+      } else {
+        // 일반 테스트는 기존 quizAnswers 유지
+        if (inProgressSession?.payloadJson) {
+          const payload = inProgressSession.payloadJson as any
+          if (payload.quizAnswers) {
+            setQuizAnswers(payload.quizAnswers)
+          }
+        }
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -186,11 +221,16 @@ export function LearningContent({
             const payload = sessionData.payloadJson as any
             if (payload?.finalTestItems) {
               setFinalTestItems(payload.finalTestItems)
+              // quizAnswers 초기화 (최종테스트는 item.id를 키로 사용)
+              setQuizAnswers({})
             }
           }
         } catch (error) {
           console.error("Failed to load final test items:", error)
         }
+      } else {
+        // 일반 테스트는 quizAnswers 초기화
+        setQuizAnswers({})
       }
     } catch (error: any) {
       console.error("Start session error:", error)
