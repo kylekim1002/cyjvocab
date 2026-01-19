@@ -160,14 +160,9 @@ export async function POST(
         })
       }
 
-      // 점수 계산 방식:
-      // - 일반 테스트(test): 정답률(%) * 100 (기존 로직 유지)
-      // - 최종테스트(finaltest): "맞힌 문항 수" 그대로 점수로 사용 (예: 10문항 중 5개 정답 → 5점)
-      if (phase === "finaltest") {
-        score = correctCount
-      } else {
-        score = totalItems > 0 ? Math.round((correctCount / totalItems) * 100) : 0
-      }
+      // 점수 계산: 테스트와 최종테스트 모두 정답률(%)로 계산
+      // 예: 10문항 중 9문항 정답 → 90점, 10문항 중 5문항 정답 → 50점
+      score = totalItems > 0 ? Math.round((correctCount / totalItems) * 100) : 0
 
       console.log("Score calculated:", { 
         correctCount, 
