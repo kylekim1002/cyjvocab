@@ -101,10 +101,14 @@ export default async function LearningPage({
   // 해당 phase의 진행 중인 세션 찾기
   const inProgressSession = allInProgressSessions.find((session) => {
     try {
+      if (!session.payloadJson) {
+        return phase === "test" // payloadJson이 없으면 test로 간주
+      }
       const payload = session.payloadJson as any
       const sessionPhase = payload?.phase || "test" // 기본값은 test
       return sessionPhase === phase
-    } catch {
+    } catch (error) {
+      console.error("Error parsing session payloadJson:", error)
       // payloadJson이 없거나 파싱 실패 시 기본값으로 test로 간주
       return phase === "test"
     }
@@ -136,10 +140,14 @@ export default async function LearningPage({
   // 해당 phase의 완료된 세션 찾기
   const completedSession = allCompletedSessions.find((session) => {
     try {
+      if (!session.payloadJson) {
+        return phase === "test" // payloadJson이 없으면 test로 간주
+      }
       const payload = session.payloadJson as any
       const sessionPhase = payload?.phase || "test" // 기본값은 test
       return sessionPhase === phase
-    } catch {
+    } catch (error) {
+      console.error("Error parsing session payloadJson:", error)
       // payloadJson이 없거나 파싱 실패 시 기본값으로 test로 간주
       return phase === "test"
     }

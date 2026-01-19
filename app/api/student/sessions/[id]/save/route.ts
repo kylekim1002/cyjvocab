@@ -72,7 +72,7 @@ export async function POST(
       },
     })
 
-    // 진행도 계산 및 업데이트
+    // 진행도 계산 및 업데이트 (단어목록/암기학습만, 테스트/최종테스트는 제외)
     const module = await prisma.learningModule.findUnique({
       where: { id: studySession.moduleId },
       include: {
@@ -81,22 +81,30 @@ export async function POST(
     })
 
     if (module) {
-      const currentIndex = nextPayload.currentIndex || 0
-      const total = module.items.length
-      const progressPct = Math.round(((currentIndex + 1) / total) * 100)
+      const phase = nextPayload.phase || "test"
+      // 단어목록/암기학습만 진행도 계산
+      if (phase === "wordlist" || phase === "memorization") {
+        const currentIndex = nextPayload.currentIndex || 0
+        // 최종테스트인 경우 finalTestItems.length 사용, 아니면 module.items.length 사용
+        let total = module.items.length
+        if (phase === "finaltest" && nextPayload.finalTestItems) {
+          total = nextPayload.finalTestItems.length
+        }
+        const progressPct = total > 0 ? Math.round(((currentIndex + 1) / total) * 100) : 0
 
-      await prisma.studentAssignmentProgress.update({
-        where: {
-          studentId_assignmentId_moduleId: {
-            studentId: session.user.studentId,
-            assignmentId: studySession.assignmentId,
-            moduleId: studySession.moduleId,
+        await prisma.studentAssignmentProgress.update({
+          where: {
+            studentId_assignmentId_moduleId: {
+              studentId: session.user.studentId,
+              assignmentId: studySession.assignmentId,
+              moduleId: studySession.moduleId,
+            },
           },
-        },
-        data: {
-          progressPct: Math.min(progressPct, 100),
-        },
-      })
+          data: {
+            progressPct: Math.min(progressPct, 100),
+          },
+        })
+      }
     }
 
     return NextResponse.json({ success: true })
