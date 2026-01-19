@@ -90,11 +90,16 @@ export function LearningContent({
       if (inProgressSession) {
         const sessionPayload = inProgressSession.payloadJson as any
         const sessionPhase = sessionPayload?.phase || "test"
-        // 다른 phase의 세션이면 삭제
+        // 다른 phase의 세션이면 삭제하고 새 세션 시작
         if (sessionPhase !== phase) {
           fetch(`/api/student/sessions/${inProgressSession.id}`, {
             method: "DELETE",
           }).catch(console.error)
+          // 다른 phase의 세션이므로 새 세션 시작
+          if (!sessionId) {
+            startNewSession()
+          }
+          return
         }
       }
       // 완료된 학습도 다시 시작할 수 있도록 항상 새 세션으로 시작
@@ -510,18 +515,28 @@ export function LearningContent({
   }
 
   // 복습 모드가 아닐 때만 완료 체크
-  // 해당 phase의 완료된 세션이 있는지 확인
-  const isPhaseCompleted = completedSession && (() => {
+  // 해당 phase의 완료된 세션이 있는지 명확히 확인
+  const isPhaseCompleted = (() => {
+    // completedSession이 없으면 완료되지 않음
+    if (!completedSession) {
+      return false
+    }
+    
+    // completedSession의 phase 확인
     try {
       const sessionPayload = completedSession.payloadJson as any
       const sessionPhase = sessionPayload?.phase || "test"
+      // 현재 phase와 일치하는 경우만 완료로 간주
       return sessionPhase === phase
     } catch {
-      return phase === "test" // payloadJson이 없으면 test로 간주
+      // payloadJson이 없거나 파싱 실패 시
+      // phase가 "test"이고 completedSession이 있으면 완료로 간주 (기존 데이터 호환)
+      return phase === "test"
     }
   })()
 
-  if (isPhaseCompleted && !isReviewMode && !sessionId) {
+  // 테스트/최종테스트만 완료 체크 (단어목록/암기학습은 제외)
+  if ((phase === "test" || phase === "finaltest") && isPhaseCompleted && !isReviewMode && !sessionId) {
     return (
       <div className="container mx-auto p-4">
         <Card>

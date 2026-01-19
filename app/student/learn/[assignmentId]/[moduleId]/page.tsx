@@ -87,8 +87,8 @@ export default async function LearningPage({
   // 단계 확인 (wordlist, memorization, test, finaltest)
   const phase = searchParams?.phase || "test" // 기본값은 test
 
-  // 진행 중인 세션 확인 (해당 phase의 세션만)
-  const inProgressSession = await prisma.studySession.findFirst({
+  // 진행 중인 세션 확인 (모든 진행 중인 세션 조회 후 phase로 필터링)
+  const allInProgressSessions = await prisma.studySession.findMany({
     where: {
       studentId: session.user.studentId,
       assignmentId: params.assignmentId,
@@ -97,6 +97,18 @@ export default async function LearningPage({
     },
     orderBy: { updatedAt: "desc" },
   })
+
+  // 해당 phase의 진행 중인 세션 찾기
+  const inProgressSession = allInProgressSessions.find((session) => {
+    try {
+      const payload = session.payloadJson as any
+      const sessionPhase = payload?.phase || "test" // 기본값은 test
+      return sessionPhase === phase
+    } catch {
+      // payloadJson이 없거나 파싱 실패 시 기본값으로 test로 간주
+      return phase === "test"
+    }
+  }) || null
 
   // 진행도 확인
   const progress = await prisma.studentAssignmentProgress.findUnique({
