@@ -386,7 +386,16 @@ export function LearningContent({
       if (!isReviewMode) {
         const score = data.score !== null && data.score !== undefined ? data.score : 0
         setCompletedScore(score)
-        setCompletedAnswers(quizAnswers)
+        // 최종테스트인 경우 변환된 answersToSend 사용, 아니면 원본 quizAnswers 사용
+        const answersForDisplay = phase === "finaltest" && finalTestItems.length > 0
+          ? (answersToSend || quizAnswers)
+          : quizAnswers
+        setCompletedAnswers(answersForDisplay)
+        console.log("Setting completed answers:", {
+          phase,
+          answersForDisplay,
+          originalQuizAnswers: quizAnswers,
+        })
         setShowResultDialog(true)
         
         // 점수 표시 토스트
