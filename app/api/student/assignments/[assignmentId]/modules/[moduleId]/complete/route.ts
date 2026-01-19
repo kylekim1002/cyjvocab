@@ -156,7 +156,7 @@ export async function POST(
         })
         
         // 최종테스트 점수 계산: 각 문항의 정답과 학생 답안 비교
-        // 아이템 ID로 매칭하여 순서와 무관하게 정확한 매칭 보장
+        // 클라이언트가 인덱스 또는 item.id를 키로 보낼 수 있으므로 둘 다 시도
         for (let idx = 0; idx < payload.finalTestItems.length; idx++) {
           const item = payload.finalTestItems[idx]
           if (!item || !item.payloadJson) {
@@ -164,12 +164,22 @@ export async function POST(
             continue
           }
           
-          // item.id가 없으면 인덱스를 fallback으로 사용
-          const itemId = item.id || idx
-          
           const correctIndex = Number(item.payloadJson.correct_index)
-          // 아이템 ID로 답안 찾기 (순서와 무관), 없으면 인덱스로 시도
-          const studentAnswer = normalizedAnswers[itemId] ?? normalizedAnswers[idx]
+          
+          // 답안 찾기: item.id를 먼저 시도, 없으면 인덱스로 시도
+          // 클라이언트가 인덱스를 키로 보낼 수도 있고, item.id를 키로 보낼 수도 있음
+          const itemId = item.id
+          let studentAnswer = undefined
+          
+          if (itemId) {
+            // item.id로 먼저 시도
+            studentAnswer = normalizedAnswers[itemId] ?? normalizedAnswers[String(itemId)]
+          }
+          
+          // item.id로 찾지 못했으면 인덱스로 시도
+          if (studentAnswer === undefined) {
+            studentAnswer = normalizedAnswers[idx] ?? normalizedAnswers[String(idx)]
+          }
           
           // 정답 인덱스 유효성 검증
           if (isNaN(correctIndex) || correctIndex < 0 || correctIndex > 3) {
@@ -186,14 +196,19 @@ export async function POST(
                            !isNaN(Number(studentAnswer)) &&
                            Number(studentAnswer) === correctIndex
           
-          console.log(`Final test item ${idx + 1}/${totalItems} (ID: ${itemId}):`, {
+          console.log(`Final test item ${idx + 1}/${totalItems} (ID: ${item.id || idx}):`, {
             word: item.payloadJson.word_text,
             correctIndex,
             studentAnswer,
             isCorrect,
-            itemId: itemId,
-            originalItemId: item.id,
-            answerKey: itemId,
+            itemId: item.id,
+            triedKeys: [item.id, String(item.id), idx, String(idx)],
+            foundInNormalized: {
+              byItemId: item.id ? normalizedAnswers[item.id] : undefined,
+              byItemIdString: item.id ? normalizedAnswers[String(item.id)] : undefined,
+              byIndex: normalizedAnswers[idx],
+              byIndexString: normalizedAnswers[String(idx)],
+            },
             choices: [
               item.payloadJson.choice1,
               item.payloadJson.choice2,
