@@ -67,15 +67,18 @@ export async function POST(
     } else {
       console.log("Found session:", studySession.id, studySession.status)
       // 기존 세션의 payloadJson 업데이트 (요청에서 온 데이터로)
-      if (requestQuizAnswers !== undefined || requestCurrentIndex !== undefined) {
+      // 중요: phase와 finalTestItems는 절대 덮어쓰지 않음 (최종테스트 데이터 보존)
+      if (requestQuizAnswers !== undefined || requestCurrentIndex !== undefined || requestPhase !== undefined) {
         const currentPayload = (studySession.payloadJson as any) || {}
         studySession = await prisma.studySession.update({
           where: { id: studySession.id },
           data: {
             payloadJson: {
-              ...currentPayload,
+              ...currentPayload, // 기존 데이터 모두 보존 (phase, finalTestItems 포함)
               currentIndex: requestCurrentIndex !== undefined ? requestCurrentIndex : currentPayload.currentIndex,
               quizAnswers: requestQuizAnswers !== undefined ? requestQuizAnswers : currentPayload.quizAnswers,
+              phase: requestPhase !== undefined ? requestPhase : currentPayload.phase, // phase도 보존
+              // finalTestItems는 절대 덮어쓰지 않음 (currentPayload에 이미 있으면 유지)
             },
           },
         })
@@ -214,27 +217,43 @@ export async function POST(
       // 예: 10문항 중 9문항 정답 → 90점
       // 예: 10문항 중 5문항 정답 → 50점
       // 예: 20문항 중 17문항 정답 → 85점
-      if (totalItems > 0) {
+      
+      // 점수 계산 전 검증
+      if (totalItems <= 0) {
+        console.error("점수 계산 오류: totalItems가 0 이하", { 
+          phase, 
+          correctCount, 
+          totalItems,
+          hasFinalTestItems: phase === "finaltest" ? !!payload.finalTestItems : "N/A",
+          finalTestItemsLength: phase === "finaltest" ? (payload.finalTestItems?.length || 0) : "N/A",
+        })
+        score = 0
+      } else if (correctCount < 0) {
+        console.error("점수 계산 오류: correctCount가 음수", { correctCount, totalItems })
+        score = 0
+      } else {
+        // 정확한 백분율 계산: (맞은 문항 수 / 총 문항 수) × 100
         const percentage = (correctCount / totalItems) * 100
         score = Math.round(percentage)
         
-        // 점수 계산 검증 로그
-        console.log("=== 점수 계산 결과 ===", {
+        // 점수 검증: 0~100 범위 확인
+        if (score < 0) {
+          console.error("점수 계산 오류: 점수가 음수", { score, correctCount, totalItems, percentage })
+          score = 0
+        } else if (score > 100) {
+          console.error("점수 계산 오류: 점수가 100 초과", { score, correctCount, totalItems, percentage })
+          score = 100
+        }
+        
+        // 점수 계산 검증 로그 (상세)
+        console.log("=== 최종 점수 계산 결과 ===", {
           phase,
           correctCount,
           totalItems,
           percentage: percentage.toFixed(2),
           score,
           formula: `(${correctCount} / ${totalItems}) × 100 = ${percentage.toFixed(2)}% → ${score}점`,
-        })
-      } else {
-        score = 0
-        console.error("Score calculation ERROR: totalItems is 0", { 
-          phase, 
-          correctCount, 
-          totalItems,
-          hasFinalTestItems: phase === "finaltest" ? !!payload.finalTestItems : "N/A",
-          finalTestItemsLength: phase === "finaltest" ? (payload.finalTestItems?.length || 0) : "N/A",
+          quizAnswersCount: Object.keys(quizAnswers).length,
         })
       }
     }
