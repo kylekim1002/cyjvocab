@@ -643,27 +643,35 @@ export function LearningContent({
           <div className="space-y-4">
             {(phase === "finaltest" && finalTestItems.length > 0 ? finalTestItems : module.items).map((item, idx) => {
               const correctIndex = getCorrectAnswer(item)
-              // 최종테스트는 item.id를 키로, 일반 테스트는 인덱스를 키로 사용
-              // item.id가 없으면 인덱스를 fallback으로 사용
-              const answerKey = phase === "finaltest" && finalTestItems.length > 0 
-                ? (item.id || idx)
-                : idx
-              const studentAnswer = completedAnswers[answerKey]
+              
+              // 답안 찾기: 인덱스를 먼저 시도, 없으면 item.id로 시도
+              // 클라이언트가 인덱스를 키로 보낼 수도 있고, item.id를 키로 보낼 수도 있음
+              let studentAnswer = undefined
+              
+              // 1. 인덱스로 먼저 시도 (일반적으로 클라이언트가 인덱스를 키로 사용)
+              studentAnswer = completedAnswers[idx] ?? completedAnswers[String(idx)] ?? completedAnswers[Number(idx)]
+              
+              // 2. 인덱스로 찾지 못했으면 item.id로 시도 (최종테스트인 경우)
+              if (studentAnswer === undefined && phase === "finaltest" && finalTestItems.length > 0 && item.id) {
+                studentAnswer = completedAnswers[item.id] ?? completedAnswers[String(item.id)]
+              }
               
               // 정답 비교: studentAnswer와 correctIndex가 일치하는지 확인
               const isCorrectAnswer = studentAnswer !== undefined && 
                                      studentAnswer !== null && 
+                                     !isNaN(Number(studentAnswer)) &&
                                      Number(studentAnswer) === Number(correctIndex)
               
               console.log("Result check:", {
                 phase,
                 idx,
                 itemId: item.id,
-                answerKey,
                 studentAnswer,
                 correctIndex,
                 isCorrectAnswer,
+                triedKeys: [idx, String(idx), Number(idx), item.id, String(item.id)],
                 completedAnswersKeys: Object.keys(completedAnswers),
+                completedAnswers: completedAnswers,
               })
               const choices = [
                 item.payloadJson?.choice1,
