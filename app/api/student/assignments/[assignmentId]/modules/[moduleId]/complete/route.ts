@@ -110,7 +110,20 @@ export async function POST(
       let totalItems = 0
 
       // 최종테스트인 경우 finalTestItems 사용
-      if (phase === "finaltest" && payload.finalTestItems) {
+      if (phase === "finaltest") {
+        // finalTestItems가 없으면 에러
+        if (!payload.finalTestItems || !Array.isArray(payload.finalTestItems)) {
+          console.error("Final test: finalTestItems not found or invalid", {
+            hasFinalTestItems: !!payload.finalTestItems,
+            finalTestItemsType: typeof payload.finalTestItems,
+            payloadKeys: Object.keys(payload),
+          })
+          return NextResponse.json(
+            { error: "최종테스트 데이터를 찾을 수 없습니다." },
+            { status: 400 }
+          )
+        }
+        
         totalItems = payload.finalTestItems.length
         
         // quizAnswers를 정규화 (키를 숫자로 변환)
@@ -122,20 +135,56 @@ export async function POST(
           }
         })
         
-        payload.finalTestItems.forEach((item: any, idx: number) => {
-          if (!item.payloadJson) {
-            console.log(`Final test item ${idx}: no payloadJson`)
-            return
+        console.log("Final test scoring:", {
+          totalItems,
+          quizAnswersCount: Object.keys(quizAnswers).length,
+          normalizedAnswersCount: Object.keys(normalizedAnswers).length,
+          normalizedAnswers,
+        })
+        
+        // 최종테스트 점수 계산: 각 문항의 정답과 학생 답안 비교
+        for (let idx = 0; idx < payload.finalTestItems.length; idx++) {
+          const item = payload.finalTestItems[idx]
+          if (!item || !item.payloadJson) {
+            console.warn(`Final test item ${idx}: missing item or payloadJson`)
+            continue
           }
+          
           const correctIndex = Number(item.payloadJson.correct_index)
           const studentAnswer = normalizedAnswers[idx]
           
-          console.log(`Final test item ${idx}: correctIndex=${correctIndex}, studentAnswer=${studentAnswer}, match=${studentAnswer === correctIndex}`)
+          // 정답 인덱스 유효성 검증
+          if (isNaN(correctIndex) || correctIndex < 0 || correctIndex > 3) {
+            console.error(`Final test item ${idx}: invalid correctIndex`, {
+              correctIndex,
+              payloadJson: item.payloadJson,
+            })
+            continue
+          }
           
-          if (studentAnswer !== undefined && studentAnswer !== null && Number(studentAnswer) === correctIndex) {
+          // 학생 답안과 정답 비교
+          const isCorrect = studentAnswer !== undefined && 
+                           studentAnswer !== null && 
+                           !isNaN(Number(studentAnswer)) &&
+                           Number(studentAnswer) === correctIndex
+          
+          console.log(`Final test item ${idx + 1}/${totalItems}:`, {
+            word: item.payloadJson.word_text,
+            correctIndex,
+            studentAnswer,
+            isCorrect,
+            choices: [
+              item.payloadJson.choice1,
+              item.payloadJson.choice2,
+              item.payloadJson.choice3,
+              item.payloadJson.choice4,
+            ],
+          })
+          
+          if (isCorrect) {
             correctCount++
           }
-        })
+        }
       } else {
         // 일반 테스트인 경우 module.items 사용
         totalItems = module.items.length
@@ -161,17 +210,33 @@ export async function POST(
       }
 
       // 점수 계산: 테스트와 최종테스트 모두 정답률(%)로 계산
-      // 예: 10문항 중 9문항 정답 → 90점, 10문항 중 5문항 정답 → 50점
-      score = totalItems > 0 ? Math.round((correctCount / totalItems) * 100) : 0
-
-      console.log("Score calculated:", { 
-        correctCount, 
-        total: totalItems, 
-        score, 
-        phase,
-        quizAnswersKeys: Object.keys(quizAnswers),
-        quizAnswers: quizAnswers
-      })
+      // 공식: (맞은 문항 수 / 총 문항 수) × 100
+      // 예: 10문항 중 9문항 정답 → 90점
+      // 예: 10문항 중 5문항 정답 → 50점
+      // 예: 20문항 중 17문항 정답 → 85점
+      if (totalItems > 0) {
+        const percentage = (correctCount / totalItems) * 100
+        score = Math.round(percentage)
+        
+        // 점수 계산 검증 로그
+        console.log("=== 점수 계산 결과 ===", {
+          phase,
+          correctCount,
+          totalItems,
+          percentage: percentage.toFixed(2),
+          score,
+          formula: `(${correctCount} / ${totalItems}) × 100 = ${percentage.toFixed(2)}% → ${score}점`,
+        })
+      } else {
+        score = 0
+        console.error("Score calculation ERROR: totalItems is 0", { 
+          phase, 
+          correctCount, 
+          totalItems,
+          hasFinalTestItems: phase === "finaltest" ? !!payload.finalTestItems : "N/A",
+          finalTestItemsLength: phase === "finaltest" ? (payload.finalTestItems?.length || 0) : "N/A",
+        })
+      }
     }
 
     // 세션 완료 처리
