@@ -646,14 +646,23 @@ export function LearningContent({
               
               // 답안 찾기: 인덱스를 먼저 시도, 없으면 item.id로 시도
               // 클라이언트가 인덱스를 키로 보낼 수도 있고, item.id를 키로 보낼 수도 있음
-              let studentAnswer = undefined
+              let studentAnswer: number | undefined = undefined
               
               // 1. 인덱스로 먼저 시도 (일반적으로 클라이언트가 인덱스를 키로 사용)
-              studentAnswer = completedAnswers[idx] ?? completedAnswers[String(idx)] ?? completedAnswers[Number(idx)]
+              // 문자열과 숫자 키 모두 시도
+              if (completedAnswers[idx] !== undefined) {
+                studentAnswer = completedAnswers[idx]
+              } else if (completedAnswers[String(idx)] !== undefined) {
+                studentAnswer = completedAnswers[String(idx)]
+              }
               
               // 2. 인덱스로 찾지 못했으면 item.id로 시도 (최종테스트인 경우)
               if (studentAnswer === undefined && phase === "finaltest" && finalTestItems.length > 0 && item.id) {
-                studentAnswer = completedAnswers[item.id] ?? completedAnswers[String(item.id)]
+                if (completedAnswers[item.id] !== undefined) {
+                  studentAnswer = completedAnswers[item.id]
+                } else if (completedAnswers[String(item.id)] !== undefined) {
+                  studentAnswer = completedAnswers[String(item.id)]
+                }
               }
               
               // 정답 비교: studentAnswer와 correctIndex가 일치하는지 확인
