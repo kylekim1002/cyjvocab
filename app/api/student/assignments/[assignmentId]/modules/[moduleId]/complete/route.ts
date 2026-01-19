@@ -102,7 +102,14 @@ export async function POST(
 
     // 점수 계산 (TYPE_A, TYPE_B인 경우)
     let score = null
-    const payload = studySession.payloadJson as any
+    // payloadJson이 null이거나 파싱 실패 시 안전하게 처리
+    let payload: any = {}
+    try {
+      payload = (studySession.payloadJson as any) || {}
+    } catch (error) {
+      console.error("Error parsing payloadJson:", error)
+      payload = {}
+    }
     // 클라이언트가 명시한 phase가 있으면 최우선 (payloadJson이 덮어써져도 안전)
     const phase = requestPhase || payload.phase || "test"
     
