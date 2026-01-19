@@ -595,7 +595,10 @@ export function LearningContent({
             {(phase === "finaltest" && finalTestItems.length > 0 ? finalTestItems : module.items).map((item, idx) => {
               const correctIndex = getCorrectAnswer(item)
               // 최종테스트는 item.id를 키로, 일반 테스트는 인덱스를 키로 사용
-              const answerKey = phase === "finaltest" && finalTestItems.length > 0 ? item.id : idx
+              // item.id가 없으면 인덱스를 fallback으로 사용
+              const answerKey = phase === "finaltest" && finalTestItems.length > 0 
+                ? (item.id || idx)
+                : idx
               const studentAnswer = completedAnswers[answerKey]
               const isCorrectAnswer = studentAnswer === correctIndex
               const choices = [
@@ -803,8 +806,9 @@ export function LearningContent({
                       currentItem.payloadJson.choice4,
                     ].filter(Boolean).map((choice: string, idx: number) => {
                       // 최종테스트는 item.id를 키로, 일반 테스트는 인덱스를 키로 사용
+                      // item.id가 없으면 인덱스를 fallback으로 사용
                       const answerKey = phase === "finaltest" && finalTestItems.length > 0 
-                        ? currentItem.id 
+                        ? (currentItem.id || currentIndex)
                         : currentIndex
                       return (
                         <Button

@@ -157,9 +157,12 @@ export async function POST(
             continue
           }
           
+          // item.id가 없으면 인덱스를 fallback으로 사용
+          const itemId = item.id || idx
+          
           const correctIndex = Number(item.payloadJson.correct_index)
-          // 아이템 ID로 답안 찾기 (순서와 무관)
-          const studentAnswer = normalizedAnswers[item.id]
+          // 아이템 ID로 답안 찾기 (순서와 무관), 없으면 인덱스로 시도
+          const studentAnswer = normalizedAnswers[itemId] ?? normalizedAnswers[idx]
           
           // 정답 인덱스 유효성 검증
           if (isNaN(correctIndex) || correctIndex < 0 || correctIndex > 3) {
@@ -176,13 +179,14 @@ export async function POST(
                            !isNaN(Number(studentAnswer)) &&
                            Number(studentAnswer) === correctIndex
           
-          console.log(`Final test item ${idx + 1}/${totalItems} (ID: ${item.id}):`, {
+          console.log(`Final test item ${idx + 1}/${totalItems} (ID: ${itemId}):`, {
             word: item.payloadJson.word_text,
             correctIndex,
             studentAnswer,
             isCorrect,
-            itemId: item.id,
-            answerKey: item.id,
+            itemId: itemId,
+            originalItemId: item.id,
+            answerKey: itemId,
             choices: [
               item.payloadJson.choice1,
               item.payloadJson.choice2,
