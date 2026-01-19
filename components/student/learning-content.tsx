@@ -209,6 +209,10 @@ export function LearningContent({
     try {
       const payload = {
         currentIndex,
+        phase,
+        ...(phase === "finaltest" && finalTestItems.length > 0
+          ? { finalTestItems }
+          : {}),
         ...((module.type === "TYPE_A" || module.type === "TYPE_B") && { quizAnswers }),
       }
 
@@ -278,6 +282,7 @@ export function LearningContent({
             quizAnswers,
             currentIndex,
             isReview: isReviewMode,
+            phase,
           }),
         }
       )

@@ -16,7 +16,7 @@ export async function POST(
   try {
     // 요청 본문에서 quizAnswers, currentIndex, isReview 가져오기
     const body = await request.json().catch(() => ({}))
-    const { quizAnswers: requestQuizAnswers, currentIndex: requestCurrentIndex, isReview } = body
+    const { quizAnswers: requestQuizAnswers, currentIndex: requestCurrentIndex, isReview, phase: requestPhase } = body
 
     console.log("Complete API called", {
       studentId: session.user.studentId,
@@ -100,7 +100,8 @@ export async function POST(
     // 점수 계산 (TYPE_A, TYPE_B인 경우)
     let score = null
     const payload = studySession.payloadJson as any
-    const phase = payload.phase || "test"
+    // 클라이언트가 명시한 phase가 있으면 최우선 (payloadJson이 덮어써져도 안전)
+    const phase = requestPhase || payload.phase || "test"
     
     if (module.type === "TYPE_A" || module.type === "TYPE_B") {
       // 요청에서 온 quizAnswers를 우선 사용, 없으면 세션의 quizAnswers 사용

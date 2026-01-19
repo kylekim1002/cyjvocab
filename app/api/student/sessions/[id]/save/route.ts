@@ -56,10 +56,18 @@ export async function POST(
     }
 
     // 세션 업데이트
+    // NOTE: 최종테스트(finaltest)처럼 서버가 생성해 둔 payloadJson(phase/finalTestItems 등)을
+    // 클라이언트가 덮어써서 잃어버리지 않도록 "병합(merge)" 한다.
+    const currentPayload = (studySession.payloadJson as any) || {}
+    const nextPayload = {
+      ...currentPayload,
+      ...(payloadJson || {}),
+    }
+
     await prisma.studySession.update({
       where: { id: params.id },
       data: {
-        payloadJson,
+        payloadJson: nextPayload,
         updatedAt: new Date(),
       },
     })
@@ -73,7 +81,7 @@ export async function POST(
     })
 
     if (module) {
-      const currentIndex = payloadJson.currentIndex || 0
+      const currentIndex = nextPayload.currentIndex || 0
       const total = module.items.length
       const progressPct = Math.round(((currentIndex + 1) / total) * 100)
 
