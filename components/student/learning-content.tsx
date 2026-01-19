@@ -59,7 +59,8 @@ export function LearningContent({
   const [quizAnswers, setQuizAnswers] = useState<Record<string | number, number>>({})
   const [showResultDialog, setShowResultDialog] = useState(false)
   const [completedScore, setCompletedScore] = useState<number | null>(null)
-  const [completedAnswers, setCompletedAnswers] = useState<Record<number, number>>({})
+  // 최종테스트는 item.id를 키로, 일반 테스트는 인덱스를 키로 사용
+  const [completedAnswers, setCompletedAnswers] = useState<Record<string | number, number>>({})
   // 단어목록/암기학습용 상태
   const [wordlistMaxIndex, setWordlistMaxIndex] = useState<number>(-1)
   const [memorizeMaxIndex, setMemorizeMaxIndex] = useState<number>(-1)
@@ -593,7 +594,9 @@ export function LearningContent({
           <div className="space-y-4">
             {(phase === "finaltest" && finalTestItems.length > 0 ? finalTestItems : module.items).map((item, idx) => {
               const correctIndex = getCorrectAnswer(item)
-              const studentAnswer = completedAnswers[idx]
+              // 최종테스트는 item.id를 키로, 일반 테스트는 인덱스를 키로 사용
+              const answerKey = phase === "finaltest" && finalTestItems.length > 0 ? item.id : idx
+              const studentAnswer = completedAnswers[answerKey]
               const isCorrectAnswer = studentAnswer === correctIndex
               const choices = [
                 item.payloadJson?.choice1,
