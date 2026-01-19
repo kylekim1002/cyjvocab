@@ -204,6 +204,7 @@ export async function POST(
         totalItems = module.items.length
         
         // quizAnswers를 정규화 (키를 숫자로 변환)
+        // 일반 테스트는 인덱스를 키로 사용
         const normalizedAnswers: Record<number, number> = {}
         Object.keys(quizAnswers).forEach(key => {
           const numKey = Number(key)
@@ -212,12 +213,28 @@ export async function POST(
           }
         })
         
+        console.log("Regular test scoring:", {
+          totalItems,
+          quizAnswersCount: Object.keys(quizAnswers).length,
+          normalizedAnswersCount: Object.keys(normalizedAnswers).length,
+          normalizedAnswers,
+        })
+        
         module.items.forEach((item, idx) => {
-          if (!item.payloadJson) return
+          if (!item.payloadJson) {
+            console.warn(`Regular test item ${idx}: missing payloadJson`)
+            return
+          }
           const itemPayload = item.payloadJson as any
           const correctIndex = Number(itemPayload.correct_index)
           const studentAnswer = normalizedAnswers[idx]
-          if (studentAnswer !== undefined && studentAnswer !== null && Number(studentAnswer) === correctIndex) {
+          
+          const isCorrect = studentAnswer !== undefined && 
+                           studentAnswer !== null && 
+                           !isNaN(Number(studentAnswer)) &&
+                           Number(studentAnswer) === correctIndex
+          
+          if (isCorrect) {
             correctCount++
           }
         })
