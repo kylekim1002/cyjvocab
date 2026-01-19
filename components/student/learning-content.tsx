@@ -623,9 +623,14 @@ export function LearningContent({
       {/* 학습 결과 다이얼로그 */}
       <Dialog open={showResultDialog} onOpenChange={(open) => {
         setShowResultDialog(open)
-        // 다이얼로그를 닫으면 새 세션 시작 가능하도록 상태 초기화
+        // 다이얼로그를 닫으면 새 세션 시작 가능하도록 상태 초기화 및 홈으로 이동
         if (!open) {
           setSessionId(null)
+          // 다이얼로그가 닫히면 홈으로 자동 이동
+          setTimeout(() => {
+            router.push("/student")
+            router.refresh()
+          }, 100)
         }
       }}>
         <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
@@ -644,7 +649,22 @@ export function LearningContent({
                 ? (item.id || idx)
                 : idx
               const studentAnswer = completedAnswers[answerKey]
-              const isCorrectAnswer = studentAnswer === correctIndex
+              
+              // 정답 비교: studentAnswer와 correctIndex가 일치하는지 확인
+              const isCorrectAnswer = studentAnswer !== undefined && 
+                                     studentAnswer !== null && 
+                                     Number(studentAnswer) === Number(correctIndex)
+              
+              console.log("Result check:", {
+                phase,
+                idx,
+                itemId: item.id,
+                answerKey,
+                studentAnswer,
+                correctIndex,
+                isCorrectAnswer,
+                completedAnswersKeys: Object.keys(completedAnswers),
+              })
               const choices = [
                 item.payloadJson?.choice1,
                 item.payloadJson?.choice2,
@@ -705,8 +725,11 @@ export function LearningContent({
           <DialogFooter>
             <Button onClick={() => {
               setShowResultDialog(false)
-              router.push("/student")
-              router.refresh()
+              // 다이얼로그 닫기 후 홈으로 자동 이동
+              setTimeout(() => {
+                router.push("/student")
+                router.refresh()
+              }, 100)
             }}>
               확인
             </Button>
