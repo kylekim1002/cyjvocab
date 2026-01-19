@@ -62,6 +62,10 @@ export async function POST(
     const nextPayload = {
       ...currentPayload,
       ...(payloadJson || {}),
+      // finalTestItems는 절대 덮어쓰지 않음 (서버가 생성한 데이터 보존)
+      ...(currentPayload.finalTestItems ? { finalTestItems: currentPayload.finalTestItems } : {}),
+      // phase도 보존 (클라이언트가 보낸 phase가 있으면 사용, 없으면 기존 것 유지)
+      phase: payloadJson?.phase || currentPayload.phase || "test",
     }
 
     await prisma.studySession.update({
@@ -82,14 +86,10 @@ export async function POST(
 
     if (module) {
       const phase = nextPayload.phase || "test"
-      // 단어목록/암기학습만 진행도 계산
+      // 단어목록/암기학습만 진행도 계산 (테스트/최종테스트는 제외)
       if (phase === "wordlist" || phase === "memorization") {
         const currentIndex = nextPayload.currentIndex || 0
-        // 최종테스트인 경우 finalTestItems.length 사용, 아니면 module.items.length 사용
-        let total = module.items.length
-        if (phase === "finaltest" && nextPayload.finalTestItems) {
-          total = nextPayload.finalTestItems.length
-        }
+        const total = module.items.length
         const progressPct = total > 0 ? Math.round(((currentIndex + 1) / total) * 100) : 0
 
         await prisma.studentAssignmentProgress.update({

@@ -212,9 +212,8 @@ export function LearningContent({
       const payload = {
         currentIndex,
         phase,
-        ...(phase === "finaltest" && finalTestItems.length > 0
-          ? { finalTestItems }
-          : {}),
+        // finalTestItems는 서버에서 생성한 것을 보존하므로 클라이언트에서 보내지 않음
+        // 서버의 save API에서 currentPayload.finalTestItems를 보존하도록 처리됨
         ...((module.type === "TYPE_A" || module.type === "TYPE_B") && { quizAnswers }),
       }
 
