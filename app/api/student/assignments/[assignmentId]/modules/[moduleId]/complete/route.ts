@@ -129,12 +129,14 @@ export async function POST(
         
         totalItems = payload.finalTestItems.length
         
-        // quizAnswers를 정규화 (키를 숫자로 변환)
-        const normalizedAnswers: Record<number, number> = {}
+        // quizAnswers를 정규화: 최종테스트는 item.id를 키로 사용
+        // 클라이언트에서 item.id를 키로 보내므로, 그대로 사용
+        const normalizedAnswers: Record<string | number, number> = {}
         Object.keys(quizAnswers).forEach(key => {
-          const numKey = Number(key)
-          if (!isNaN(numKey)) {
-            normalizedAnswers[numKey] = Number(quizAnswers[key as keyof typeof quizAnswers])
+          // 키가 숫자 문자열이면 숫자로, 아니면 문자열로 유지 (item.id는 문자열일 수 있음)
+          const answerValue = Number(quizAnswers[key as keyof typeof quizAnswers])
+          if (!isNaN(answerValue)) {
+            normalizedAnswers[key] = answerValue
           }
         })
         
@@ -143,9 +145,11 @@ export async function POST(
           quizAnswersCount: Object.keys(quizAnswers).length,
           normalizedAnswersCount: Object.keys(normalizedAnswers).length,
           normalizedAnswers,
+          finalTestItemIds: payload.finalTestItems.map((item: any) => item.id),
         })
         
         // 최종테스트 점수 계산: 각 문항의 정답과 학생 답안 비교
+        // 아이템 ID로 매칭하여 순서와 무관하게 정확한 매칭 보장
         for (let idx = 0; idx < payload.finalTestItems.length; idx++) {
           const item = payload.finalTestItems[idx]
           if (!item || !item.payloadJson) {
@@ -154,7 +158,8 @@ export async function POST(
           }
           
           const correctIndex = Number(item.payloadJson.correct_index)
-          const studentAnswer = normalizedAnswers[idx]
+          // 아이템 ID로 답안 찾기 (순서와 무관)
+          const studentAnswer = normalizedAnswers[item.id]
           
           // 정답 인덱스 유효성 검증
           if (isNaN(correctIndex) || correctIndex < 0 || correctIndex > 3) {
@@ -171,11 +176,13 @@ export async function POST(
                            !isNaN(Number(studentAnswer)) &&
                            Number(studentAnswer) === correctIndex
           
-          console.log(`Final test item ${idx + 1}/${totalItems}:`, {
+          console.log(`Final test item ${idx + 1}/${totalItems} (ID: ${item.id}):`, {
             word: item.payloadJson.word_text,
             correctIndex,
             studentAnswer,
             isCorrect,
+            itemId: item.id,
+            answerKey: item.id,
             choices: [
               item.payloadJson.choice1,
               item.payloadJson.choice2,

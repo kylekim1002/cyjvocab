@@ -55,7 +55,8 @@ export function LearningContent({
   const [currentIndex, setCurrentIndex] = useState(0)
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
-  const [quizAnswers, setQuizAnswers] = useState<Record<number, number>>({})
+  // 최종테스트는 item.id를 키로, 일반 테스트는 인덱스를 키로 사용
+  const [quizAnswers, setQuizAnswers] = useState<Record<string | number, number>>({})
   const [showResultDialog, setShowResultDialog] = useState(false)
   const [completedScore, setCompletedScore] = useState<number | null>(null)
   const [completedAnswers, setCompletedAnswers] = useState<Record<number, number>>({})
@@ -750,22 +751,28 @@ export function LearningContent({
                       currentItem.payloadJson.choice2,
                       currentItem.payloadJson.choice3,
                       currentItem.payloadJson.choice4,
-                    ].filter(Boolean).map((choice: string, idx: number) => (
-                      <Button
-                        key={idx}
-                        variant={
-                          quizAnswers[currentIndex] === idx
-                            ? "default"
-                            : "outline"
-                        }
-                        className="w-full justify-start"
-                        onClick={() => {
-                          setQuizAnswers({ ...quizAnswers, [currentIndex]: idx })
-                        }}
-                      >
-                        {choice}
-                      </Button>
-                    ))}
+                    ].filter(Boolean).map((choice: string, idx: number) => {
+                      // 최종테스트는 item.id를 키로, 일반 테스트는 인덱스를 키로 사용
+                      const answerKey = phase === "finaltest" && finalTestItems.length > 0 
+                        ? currentItem.id 
+                        : currentIndex
+                      return (
+                        <Button
+                          key={idx}
+                          variant={
+                            quizAnswers[answerKey] === idx
+                              ? "default"
+                              : "outline"
+                          }
+                          className="w-full justify-start"
+                          onClick={() => {
+                            setQuizAnswers({ ...quizAnswers, [answerKey]: idx })
+                          }}
+                        >
+                          {choice}
+                        </Button>
+                      )
+                    })}
                   </div>
                 </div>
               </div>
@@ -791,22 +798,28 @@ export function LearningContent({
                       currentItem.payloadJson.choice2,
                       currentItem.payloadJson.choice3,
                       currentItem.payloadJson.choice4,
-                    ].filter(Boolean).map((choice: string, idx: number) => (
-                      <Button
-                        key={idx}
-                        variant={
-                          quizAnswers[currentIndex] === idx
-                            ? "default"
-                            : "outline"
-                        }
-                        className="w-full justify-start"
-                        onClick={() => {
-                          setQuizAnswers({ ...quizAnswers, [currentIndex]: idx })
-                        }}
-                      >
-                        {choice}
-                      </Button>
-                    ))}
+                    ].filter(Boolean).map((choice: string, idx: number) => {
+                      // 최종테스트는 item.id를 키로, 일반 테스트는 인덱스를 키로 사용
+                      const answerKey = phase === "finaltest" && finalTestItems.length > 0 
+                        ? currentItem.id 
+                        : currentIndex
+                      return (
+                        <Button
+                          key={idx}
+                          variant={
+                            quizAnswers[answerKey] === idx
+                              ? "default"
+                              : "outline"
+                          }
+                          className="w-full justify-start"
+                          onClick={() => {
+                            setQuizAnswers({ ...quizAnswers, [answerKey]: idx })
+                          }}
+                        >
+                          {choice}
+                        </Button>
+                      )
+                    })}
                   </div>
                 </div>
               </div>
