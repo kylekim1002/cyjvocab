@@ -347,7 +347,7 @@ export function LearningManagement({
         choice2: "바나나",
         choice3: "오렌지",
         choice4: "포도",
-        correct_choice: 1,
+        correct_answer: "사과", // 보기 중 하나와 동일한 텍스트 입력
       },
       {
         type: "TYPE_B",
@@ -357,7 +357,7 @@ export function LearningManagement({
         choice2: "펜",
         choice3: "책상",
         choice4: "의자",
-        correct_choice: 1,
+        correct_answer: "책", // 보기 중 하나와 동일한 텍스트 입력
       },
     ]
 
@@ -422,12 +422,22 @@ export function LearningManagement({
           continue
         }
 
-        // correct_choice 검증
-        const correctChoice = parseInt(row.correct_choice)
-        if (isNaN(correctChoice) || correctChoice < 1 || correctChoice > 4) {
+        // correct_answer 검증 (보기 중 하나와 일치해야 함)
+        const correctAnswer = row.correct_answer?.trim() || ""
+        if (!correctAnswer) {
           errors.push({
             row: rowNum,
-            reason: "correct_choice는 1~4 사이의 값이어야 합니다.",
+            reason: "correct_answer가 필요합니다.",
+          })
+          continue
+        }
+
+        const choices = [row.choice1?.trim() || "", row.choice2?.trim() || "", row.choice3?.trim() || "", row.choice4?.trim() || ""]
+        const matchedIndex = choices.findIndex(choice => choice === correctAnswer)
+        if (matchedIndex === -1) {
+          errors.push({
+            row: rowNum,
+            reason: `correct_answer("${correctAnswer}")가 보기 중 하나와 일치하지 않습니다.`,
           })
           continue
         }
@@ -438,7 +448,8 @@ export function LearningManagement({
           choice2: row.choice2,
           choice3: row.choice3,
           choice4: row.choice4,
-          correct_index: correctChoice - 1, // 0-based index
+          correct_index: matchedIndex,
+          correct_answer: correctAnswer, // 정답 텍스트 저장
           image_url: row.image_url || undefined,
         })
       }
@@ -816,7 +827,7 @@ export function LearningManagement({
                       onChange={handleExcelUpload}
                     />
                     <p className="text-sm text-muted-foreground mt-2">
-                      컬럼: type, word_text, image_url (TYPE_B만), choice1, choice2, choice3, choice4, correct_choice (1~4)
+                      컬럼: type, word_text, image_url (TYPE_B만), choice1, choice2, choice3, choice4, correct_answer (보기 중 하나와 동일한 텍스트)
                     </p>
                   </div>
                 )}
