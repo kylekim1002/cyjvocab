@@ -82,7 +82,12 @@ export default async function LearningPage({
     redirect("/student")
   }
 
-  // 진행 중인 세션 확인
+  // 복습 모드 확인
+  const isReviewMode = searchParams?.review === "true"
+  // 단계 확인 (wordlist, memorization, test, finaltest)
+  const phase = searchParams?.phase || "test" // 기본값은 test
+
+  // 진행 중인 세션 확인 (해당 phase의 세션만)
   const inProgressSession = await prisma.studySession.findFirst({
     where: {
       studentId: session.user.studentId,
@@ -104,23 +109,29 @@ export default async function LearningPage({
     },
   })
 
-  // 완료된 세션 확인 (보기 모드용)
-  const completedSession = progress?.completed
-    ? await prisma.studySession.findFirst({
-        where: {
-          studentId: session.user.studentId,
-          assignmentId: params.assignmentId,
-          moduleId: params.moduleId,
-          status: "COMPLETED",
-        },
-        orderBy: { completedAt: "desc" },
-      })
-    : null
+  // 완료된 세션 확인 (해당 phase의 세션만)
+  // 모든 완료된 세션을 조회한 후 phase로 필터링
+  const allCompletedSessions = await prisma.studySession.findMany({
+    where: {
+      studentId: session.user.studentId,
+      assignmentId: params.assignmentId,
+      moduleId: params.moduleId,
+      status: "COMPLETED",
+    },
+    orderBy: { completedAt: "desc" },
+  })
 
-  // 복습 모드 확인
-  const isReviewMode = searchParams?.review === "true"
-  // 단계 확인 (wordlist, memorization, test)
-  const phase = searchParams?.phase || "test" // 기본값은 test
+  // 해당 phase의 완료된 세션 찾기
+  const completedSession = allCompletedSessions.find((session) => {
+    try {
+      const payload = session.payloadJson as any
+      const sessionPhase = payload?.phase || "test" // 기본값은 test
+      return sessionPhase === phase
+    } catch {
+      // payloadJson이 없거나 파싱 실패 시 기본값으로 test로 간주
+      return phase === "test"
+    }
+  }) || null
 
   return (
     <LearningContent

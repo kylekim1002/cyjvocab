@@ -86,22 +86,30 @@ export function LearningContent({
     
     // 테스트/최종테스트 단계에서만 세션 체크
     if (phase === "test" || phase === "finaltest") {
-      // 진행 중인 세션이 있으면 삭제하고 새로 시작 (완료된 학습도 포함)
+      // 진행 중인 세션이 있으면 phase 확인 후 처리
       if (inProgressSession) {
-        // 기존 세션 삭제
-        fetch(`/api/student/sessions/${inProgressSession.id}`, {
-          method: "DELETE",
-        }).catch(console.error)
+        const sessionPayload = inProgressSession.payloadJson as any
+        const sessionPhase = sessionPayload?.phase || "test"
+        // 다른 phase의 세션이면 삭제
+        if (sessionPhase !== phase) {
+          fetch(`/api/student/sessions/${inProgressSession.id}`, {
+            method: "DELETE",
+          }).catch(console.error)
+        }
       }
       // 완료된 학습도 다시 시작할 수 있도록 항상 새 세션으로 시작
       // 완료된 학습이고 completedSession이 있으면 결과 다이얼로그 표시
-      if (progress?.completed && completedSession && !showResultDialog) {
-        // 결과 다이얼로그 표시 (한 번만)
-        const payload = completedSession.payloadJson as any
-        const answers = payload?.quizAnswers || {}
-        setCompletedScore(completedSession.score)
-        setCompletedAnswers(answers)
-        setShowResultDialog(true)
+      // 단, completedSession의 phase가 현재 phase와 일치하는 경우만
+      if (completedSession && !showResultDialog) {
+        const sessionPayload = completedSession.payloadJson as any
+        const sessionPhase = sessionPayload?.phase || "test"
+        // 현재 phase와 일치하는 세션만 표시
+        if (sessionPhase === phase) {
+          const answers = sessionPayload?.quizAnswers || {}
+          setCompletedScore(completedSession.score)
+          setCompletedAnswers(answers)
+          setShowResultDialog(true)
+        }
       }
       // 항상 새 세션 시작 (완료된 학습도 다시 시작 가능)
       if (!sessionId) {
@@ -502,7 +510,18 @@ export function LearningContent({
   }
 
   // 복습 모드가 아닐 때만 완료 체크
-  if (progress?.completed && !isReviewMode && !sessionId) {
+  // 해당 phase의 완료된 세션이 있는지 확인
+  const isPhaseCompleted = completedSession && (() => {
+    try {
+      const sessionPayload = completedSession.payloadJson as any
+      const sessionPhase = sessionPayload?.phase || "test"
+      return sessionPhase === phase
+    } catch {
+      return phase === "test" // payloadJson이 없으면 test로 간주
+    }
+  })()
+
+  if (isPhaseCompleted && !isReviewMode && !sessionId) {
     return (
       <div className="container mx-auto p-4">
         <Card>
