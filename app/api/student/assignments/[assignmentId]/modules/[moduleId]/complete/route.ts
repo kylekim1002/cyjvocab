@@ -145,7 +145,7 @@ export async function POST(
           quizAnswersCount: Object.keys(quizAnswers).length,
           normalizedAnswersCount: Object.keys(normalizedAnswers).length,
           normalizedAnswers,
-          finalTestItemIds: payload.finalTestItems.map((item: any) => item.id),
+          finalTestItemIds: payload.finalTestItems.map((item: any, idx: number) => item.id || idx),
         })
         
         // 최종테스트 점수 계산: 각 문항의 정답과 학생 답안 비교
