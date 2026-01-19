@@ -303,15 +303,20 @@ export function LearningContent({
 
     setIsLoading(true)
     try {
+      // 최종테스트는 item.id를 키로 사용했는지 확인
       console.log("Calling complete API", { 
         sessionId: currentSessionId, 
         assignmentId, 
         moduleId: module.id,
+        phase,
         quizAnswers,
-        currentIndex 
+        quizAnswersKeys: Object.keys(quizAnswers),
+        currentIndex,
+        isFinalTest: phase === "finaltest",
+        finalTestItemsCount: finalTestItems.length,
       })
       
-      // quizAnswers를 함께 전달
+      // quizAnswers와 phase를 함께 전달
       const response = await fetch(
         `/api/student/assignments/${assignmentId}/modules/${module.id}/complete`,
         { 
@@ -322,8 +327,8 @@ export function LearningContent({
           body: JSON.stringify({
             quizAnswers,
             currentIndex,
+            phase, // phase 명시적으로 전달
             isReview: isReviewMode,
-            phase,
           }),
         }
       )
