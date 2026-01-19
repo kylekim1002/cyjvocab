@@ -29,26 +29,7 @@ export async function POST(request: Request) {
 
     const studentId = session.user.studentId
 
-    // 학생 정보 및 현재 배정 클래스 확인
-    const student = await prisma.student.findUnique({
-      where: { id: studentId },
-      include: {
-        studentClasses: {
-          where: {
-            endAt: null,
-          },
-        },
-      },
-    })
-
-    if (!student || student.status !== "ACTIVE") {
-      return NextResponse.json(
-        { error: "활성 상태가 아닙니다." },
-        { status: 403 }
-      )
-    }
-
-    // Assignment 확인
+    // Assignment 확인 (학생 정보는 세션에서 이미 확인됨)
     const assignment = await prisma.classAssignment.findUnique({
       where: { id: assignmentId },
     })
