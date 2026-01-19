@@ -10,13 +10,27 @@ export default async function AdminDashboard() {
     return null
   }
 
-  // 통계 데이터 조회
-  const [campusCount, classCount, studentCount, learningCount] = await Promise.all([
-    prisma.campus.count(),
-    prisma.class.count({ where: { deletedAt: null } }),
-    prisma.student.count({ where: { status: "ACTIVE" } }),
-    prisma.learningModule.count(),
-  ])
+  // 통계 데이터 조회 (에러 발생 시 기본값 사용)
+  let campusCount = 0
+  let classCount = 0
+  let studentCount = 0
+  let learningCount = 0
+
+  try {
+    const [campus, classes, students, learning] = await Promise.all([
+      prisma.campus.count(),
+      prisma.class.count({ where: { deletedAt: null } }),
+      prisma.student.count({ where: { status: "ACTIVE" } }),
+      prisma.learningModule.count(),
+    ])
+    campusCount = campus
+    classCount = classes
+    studentCount = students
+    learningCount = learning
+  } catch (error) {
+    console.error("Error fetching dashboard statistics:", error)
+    // 에러 발생 시 기본값(0) 사용
+  }
 
   return (
     <div className="space-y-6">

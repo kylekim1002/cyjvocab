@@ -200,11 +200,14 @@ export default async function StudentHomePage() {
             if (s.status !== "COMPLETED" || s.score === null || s.score === undefined) return false
             // 세션의 payloadJson에서 phase 확인
             try {
+              if (!s.payloadJson) {
+                return true // payloadJson이 없으면 기본적으로 test로 간주
+              }
               const payload = s.payloadJson as any
               const phase = payload?.phase || "test"
               return phase === "test"
             } catch {
-              return true // payloadJson이 없으면 기본적으로 test로 간주
+              return true // payloadJson 파싱 실패 시 기본적으로 test로 간주
             }
           }
         )
@@ -218,11 +221,14 @@ export default async function StudentHomePage() {
             if (s.status !== "COMPLETED" || s.score === null || s.score === undefined) return false
             // 세션의 payloadJson에서 phase 확인
             try {
+              if (!s.payloadJson) {
+                return false // payloadJson이 없으면 finaltest로 간주하지 않음
+              }
               const payload = s.payloadJson as any
               const phase = payload?.phase || "test"
               return phase === "finaltest"
             } catch {
-              return false
+              return false // payloadJson 파싱 실패 시 finaltest로 간주하지 않음
             }
           }
         )
