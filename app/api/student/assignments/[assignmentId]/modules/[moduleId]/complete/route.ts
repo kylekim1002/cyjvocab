@@ -168,14 +168,23 @@ export async function POST(
           
           // 답안 찾기: 인덱스를 먼저 시도 (클라이언트가 인덱스를 키로 보내는 경우가 많음)
           // 그 다음 item.id로 시도
-          let studentAnswer = undefined
+          let studentAnswer: number | undefined = undefined
           
           // 1. 인덱스로 먼저 시도 (일반적으로 클라이언트가 인덱스를 키로 사용)
-          studentAnswer = normalizedAnswers[idx] ?? normalizedAnswers[String(idx)] ?? normalizedAnswers[Number(idx)]
+          // 문자열과 숫자 키 모두 시도
+          if (normalizedAnswers[idx] !== undefined) {
+            studentAnswer = normalizedAnswers[idx]
+          } else if (normalizedAnswers[String(idx)] !== undefined) {
+            studentAnswer = normalizedAnswers[String(idx)]
+          }
           
           // 2. 인덱스로 찾지 못했으면 item.id로 시도
           if (studentAnswer === undefined && item.id) {
-            studentAnswer = normalizedAnswers[item.id] ?? normalizedAnswers[String(item.id)]
+            if (normalizedAnswers[item.id] !== undefined) {
+              studentAnswer = normalizedAnswers[item.id]
+            } else if (normalizedAnswers[String(item.id)] !== undefined) {
+              studentAnswer = normalizedAnswers[String(item.id)]
+            }
           }
           
           // 정답 인덱스 유효성 검증
