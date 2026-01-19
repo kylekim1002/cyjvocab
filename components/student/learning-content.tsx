@@ -845,11 +845,19 @@ export function LearningContent({
                       currentItem.payloadJson.choice3,
                       currentItem.payloadJson.choice4,
                     ].filter(Boolean).map((choice: string, idx: number) => {
-                      // 최종테스트는 item.id를 키로, 일반 테스트는 인덱스를 키로 사용
-                      // item.id가 없으면 인덱스를 fallback으로 사용
-                      const answerKey = phase === "finaltest" && finalTestItems.length > 0 
-                        ? (currentItem.id || currentIndex)
-                        : currentIndex
+                      // 최종테스트는 반드시 item.id를 키로 사용 (없으면 에러)
+                      // 일반 테스트는 인덱스를 키로 사용
+                      let answerKey: string | number
+                      if (phase === "finaltest" && finalTestItems.length > 0) {
+                        if (!currentItem.id) {
+                          console.error("Final test item missing id:", currentItem)
+                          answerKey = currentIndex // fallback
+                        } else {
+                          answerKey = currentItem.id
+                        }
+                      } else {
+                        answerKey = currentIndex
+                      }
                       return (
                         <Button
                           key={idx}
@@ -860,7 +868,9 @@ export function LearningContent({
                           }
                           className="w-full justify-start"
                           onClick={() => {
-                            setQuizAnswers({ ...quizAnswers, [answerKey]: idx })
+                            const newAnswers = { ...quizAnswers, [answerKey]: idx }
+                            console.log("Setting quiz answer:", { answerKey, idx, phase, itemId: currentItem.id, currentIndex })
+                            setQuizAnswers(newAnswers)
                           }}
                         >
                           {choice}
