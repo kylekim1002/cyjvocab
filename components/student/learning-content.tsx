@@ -303,14 +303,38 @@ export function LearningContent({
 
     setIsLoading(true)
     try {
-      // 최종테스트는 item.id를 키로 사용했는지 확인
+      // 최종테스트인 경우 quizAnswers를 item.id 기반으로 변환
+      let answersToSend = quizAnswers
+      if (phase === "finaltest" && finalTestItems.length > 0) {
+        // 인덱스 기반 quizAnswers를 item.id 기반으로 변환
+        const convertedAnswers: Record<string | number, number> = {}
+        finalTestItems.forEach((item, idx) => {
+          const itemId = item.id || idx
+          // 기존 quizAnswers에서 인덱스로 찾아서 item.id로 변환
+          if (quizAnswers[idx] !== undefined) {
+            convertedAnswers[itemId] = quizAnswers[idx]
+          } else if (quizAnswers[String(idx)] !== undefined) {
+            convertedAnswers[itemId] = quizAnswers[String(idx)]
+          } else if (quizAnswers[itemId] !== undefined) {
+            // 이미 item.id로 되어 있으면 그대로 사용
+            convertedAnswers[itemId] = quizAnswers[itemId]
+          }
+        })
+        answersToSend = convertedAnswers
+        console.log("Converted quizAnswers for finaltest:", {
+          original: quizAnswers,
+          converted: answersToSend,
+          finalTestItems: finalTestItems.map((item, idx) => ({ idx, id: item.id })),
+        })
+      }
+      
       console.log("Calling complete API", { 
         sessionId: currentSessionId, 
         assignmentId, 
         moduleId: module.id,
         phase,
-        quizAnswers,
-        quizAnswersKeys: Object.keys(quizAnswers),
+        quizAnswers: answersToSend,
+        quizAnswersKeys: Object.keys(answersToSend),
         currentIndex,
         isFinalTest: phase === "finaltest",
         finalTestItemsCount: finalTestItems.length,
@@ -325,7 +349,7 @@ export function LearningContent({
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            quizAnswers,
+            quizAnswers: answersToSend,
             currentIndex,
             phase, // phase 명시적으로 전달
             isReview: isReviewMode,

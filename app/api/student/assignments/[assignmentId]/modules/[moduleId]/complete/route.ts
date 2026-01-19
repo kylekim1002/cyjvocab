@@ -166,24 +166,25 @@ export async function POST(
           
           const correctIndex = Number(item.payloadJson.correct_index)
           
-          // 답안 찾기: 인덱스를 먼저 시도 (클라이언트가 인덱스를 키로 보내는 경우가 많음)
-          // 그 다음 item.id로 시도
+          // 답안 찾기: item.id를 먼저 시도 (클라이언트가 변환해서 보냄)
+          // 없으면 인덱스로 시도 (하위 호환성)
           let studentAnswer: number | undefined = undefined
           
-          // 1. 인덱스로 먼저 시도 (일반적으로 클라이언트가 인덱스를 키로 사용)
-          // 문자열과 숫자 키 모두 시도
-          if (normalizedAnswers[idx] !== undefined) {
-            studentAnswer = normalizedAnswers[idx]
-          } else if (normalizedAnswers[String(idx)] !== undefined) {
-            studentAnswer = normalizedAnswers[String(idx)]
-          }
-          
-          // 2. 인덱스로 찾지 못했으면 item.id로 시도
-          if (studentAnswer === undefined && item.id) {
+          // 1. item.id로 먼저 시도 (클라이언트가 변환해서 보냄)
+          if (item.id) {
             if (normalizedAnswers[item.id] !== undefined) {
               studentAnswer = normalizedAnswers[item.id]
             } else if (normalizedAnswers[String(item.id)] !== undefined) {
               studentAnswer = normalizedAnswers[String(item.id)]
+            }
+          }
+          
+          // 2. item.id로 찾지 못했으면 인덱스로 시도 (하위 호환성)
+          if (studentAnswer === undefined) {
+            if (normalizedAnswers[idx] !== undefined) {
+              studentAnswer = normalizedAnswers[idx]
+            } else if (normalizedAnswers[String(idx)] !== undefined) {
+              studentAnswer = normalizedAnswers[String(idx)]
             }
           }
           
