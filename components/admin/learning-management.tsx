@@ -19,8 +19,7 @@ interface LearningItem {
   choice2: string
   choice3: string
   choice4: string
-  correct_index: number
-  correct_answer?: string // 정답 텍스트 입력용 (임시 필드)
+  correct_index: number // 0: 보기1, 1: 보기2, 2: 보기3, 3: 보기4
   image_url?: string
   image_file?: File | null
   audio_url?: string
@@ -88,8 +87,7 @@ export function LearningManagement({
         choice2: "",
         choice3: "",
         choice4: "",
-        correct_index: 0,
-        correct_answer: "", // 정답 텍스트 입력용
+        correct_index: 0, // 기본값: 보기1
         image_url: "",
         audio_url: "",
       },
@@ -182,23 +180,11 @@ export function LearningManagement({
         })
         return
       }
-      // 정답 텍스트 입력 검증
-      if (!item.correct_answer || !item.correct_answer.trim()) {
+      // 정답 인덱스 검증
+      if (item.correct_index < 0 || item.correct_index > 3) {
         toast({
           title: "오류",
-          description: `문항 ${i + 1}: 정답을 입력해주세요.`,
-          variant: "destructive",
-        })
-        return
-      }
-      // 정답이 보기 중 하나와 일치하는지 확인
-      const choices = [item.choice1.trim(), item.choice2.trim(), item.choice3.trim(), item.choice4.trim()]
-      const correctAnswerText = item.correct_answer.trim()
-      const matchedIndex = choices.findIndex(choice => choice === correctAnswerText)
-      if (matchedIndex === -1) {
-        toast({
-          title: "오류",
-          description: `문항 ${i + 1}: 정답이 보기 중 하나와 일치하지 않습니다.`,
+          description: `문항 ${i + 1}: 정답을 선택해주세요.`,
           variant: "destructive",
         })
         return
@@ -272,13 +258,9 @@ export function LearningManagement({
             }
           }
 
-          // 정답 텍스트를 보기와 비교하여 correct_index 계산
-          const choices = [item.choice1.trim(), item.choice2.trim(), item.choice3.trim(), item.choice4.trim()]
-          const correctAnswerText = item.correct_answer?.trim() || ""
-          const correctIndex = choices.findIndex(choice => choice === correctAnswerText)
-          
-          if (correctIndex === -1) {
-            throw new Error(`문항 ${items.indexOf(item) + 1}: 정답이 보기 중 하나와 일치하지 않습니다.`)
+          // correct_index 직접 사용
+          if (item.correct_index < 0 || item.correct_index > 3) {
+            throw new Error(`문항 ${items.indexOf(item) + 1}: 정답 인덱스가 유효하지 않습니다.`)
           }
 
           return {
@@ -287,7 +269,7 @@ export function LearningManagement({
             choice2: item.choice2.trim(),
             choice3: item.choice3.trim(),
             choice4: item.choice4.trim(),
-            correct_index: correctIndex,
+            correct_index: item.correct_index,
             image_url: imageUrl?.trim() || null,
             audio_url: audioUrl?.trim() || null,
           }
@@ -347,7 +329,7 @@ export function LearningManagement({
         choice2: "바나나",
         choice3: "오렌지",
         choice4: "포도",
-        correct_answer: "사과", // 보기 중 하나와 동일한 텍스트 입력
+        correct_index: 0, // 0: 보기1, 1: 보기2, 2: 보기3, 3: 보기4
       },
       {
         type: "TYPE_B",
@@ -357,7 +339,7 @@ export function LearningManagement({
         choice2: "펜",
         choice3: "책상",
         choice4: "의자",
-        correct_answer: "책", // 보기 중 하나와 동일한 텍스트 입력
+        correct_index: 0, // 0: 보기1, 1: 보기2, 2: 보기3, 3: 보기4
       },
     ]
 
@@ -422,22 +404,15 @@ export function LearningManagement({
           continue
         }
 
-        // correct_answer 검증 (보기 중 하나와 일치해야 함)
-        const correctAnswer = row.correct_answer?.trim() || ""
-        if (!correctAnswer) {
+        // correct_index 검증 (0: 보기1, 1: 보기2, 2: 보기3, 3: 보기4)
+        const correctIndex = row.correct_index !== undefined && row.correct_index !== null
+          ? Number(row.correct_index)
+          : -1
+        
+        if (isNaN(correctIndex) || correctIndex < 0 || correctIndex > 3) {
           errors.push({
             row: rowNum,
-            reason: "correct_answer가 필요합니다.",
-          })
-          continue
-        }
-
-        const choices = [row.choice1?.trim() || "", row.choice2?.trim() || "", row.choice3?.trim() || "", row.choice4?.trim() || ""]
-        const matchedIndex = choices.findIndex(choice => choice === correctAnswer)
-        if (matchedIndex === -1) {
-          errors.push({
-            row: rowNum,
-            reason: `correct_answer("${correctAnswer}")가 보기 중 하나와 일치하지 않습니다.`,
+            reason: `correct_index가 유효하지 않습니다. (0: 보기1, 1: 보기2, 2: 보기3, 3: 보기4)`,
           })
           continue
         }
@@ -448,8 +423,7 @@ export function LearningManagement({
           choice2: row.choice2,
           choice3: row.choice3,
           choice4: row.choice4,
-          correct_index: matchedIndex,
-          correct_answer: correctAnswer, // 정답 텍스트 저장
+          correct_index: correctIndex,
           image_url: row.image_url || undefined,
         })
       }
@@ -493,12 +467,6 @@ export function LearningManagement({
     // 기존 문항 로드
     const loadedItems: LearningItem[] = module.items.map((item) => {
       const correctIndex = item.payloadJson.correct_index || 0
-      const choices = [
-        item.payloadJson.choice1 || "",
-        item.payloadJson.choice2 || "",
-        item.payloadJson.choice3 || "",
-        item.payloadJson.choice4 || ""
-      ]
       return {
         word_text: item.payloadJson.word_text || "",
         choice1: item.payloadJson.choice1 || "",
@@ -506,7 +474,6 @@ export function LearningManagement({
         choice3: item.payloadJson.choice3 || "",
         choice4: item.payloadJson.choice4 || "",
         correct_index: correctIndex,
-        correct_answer: choices[correctIndex] || "", // 기존 정답 인덱스로부터 정답 텍스트 복원
         image_url: item.payloadJson.image_url || undefined,
         audio_url: item.payloadJson.audio_url || undefined,
       }
@@ -556,23 +523,11 @@ export function LearningManagement({
         })
         return
       }
-      // 정답 텍스트 입력 검증
-      if (!item.correct_answer || !item.correct_answer.trim()) {
+      // 정답 인덱스 검증
+      if (item.correct_index < 0 || item.correct_index > 3) {
         toast({
           title: "오류",
-          description: `문항 ${i + 1}: 정답을 입력해주세요.`,
-          variant: "destructive",
-        })
-        return
-      }
-      // 정답이 보기 중 하나와 일치하는지 확인
-      const choices = [item.choice1.trim(), item.choice2.trim(), item.choice3.trim(), item.choice4.trim()]
-      const correctAnswerText = item.correct_answer.trim()
-      const matchedIndex = choices.findIndex(choice => choice === correctAnswerText)
-      if (matchedIndex === -1) {
-        toast({
-          title: "오류",
-          description: `문항 ${i + 1}: 정답이 보기 중 하나와 일치하지 않습니다.`,
+          description: `문항 ${i + 1}: 정답을 선택해주세요.`,
           variant: "destructive",
         })
         return
@@ -637,13 +592,9 @@ export function LearningManagement({
               throw new Error(`문항 ${editItems.indexOf(item) + 1}: 음원 업로드 실패 - ${uploadError.message}`)
             }
           }
-          // 정답 텍스트를 보기와 비교하여 correct_index 계산
-          const choices = [item.choice1.trim(), item.choice2.trim(), item.choice3.trim(), item.choice4.trim()]
-          const correctAnswerText = item.correct_answer?.trim() || ""
-          const correctIndex = choices.findIndex(choice => choice === correctAnswerText)
-          
-          if (correctIndex === -1) {
-            throw new Error(`문항 ${editItems.indexOf(item) + 1}: 정답이 보기 중 하나와 일치하지 않습니다.`)
+          // correct_index 직접 사용
+          if (item.correct_index < 0 || item.correct_index > 3) {
+            throw new Error(`문항 ${editItems.indexOf(item) + 1}: 정답 인덱스가 유효하지 않습니다.`)
           }
 
           return {
@@ -652,7 +603,7 @@ export function LearningManagement({
             choice2: item.choice2.trim(),
             choice3: item.choice3.trim(),
             choice4: item.choice4.trim(),
-            correct_index: correctIndex,
+            correct_index: item.correct_index,
             image_url: imageUrl?.trim() || null,
             audio_url: audioUrl?.trim() || null,
           }
@@ -827,7 +778,7 @@ export function LearningManagement({
                       onChange={handleExcelUpload}
                     />
                     <p className="text-sm text-muted-foreground mt-2">
-                      컬럼: type, word_text, image_url (TYPE_B만), choice1, choice2, choice3, choice4, correct_answer (보기 중 하나와 동일한 텍스트)
+                      컬럼: type, word_text, image_url (TYPE_B만), choice1, choice2, choice3, choice4, correct_index (0: 보기1, 1: 보기2, 2: 보기3, 3: 보기4)
                     </p>
                   </div>
                 )}
@@ -924,40 +875,25 @@ export function LearningManagement({
                           </div>
                         </div>
                         <div>
-                          <Label>정답 * (보기 중 하나와 동일하게 입력)</Label>
-                          <Input
-                            value={item.correct_answer || ""}
-                            onChange={(e) => {
+                          <Label>정답 *</Label>
+                          <Select
+                            value={item.correct_index.toString()}
+                            onValueChange={(v) => {
                               const newItems = [...items]
-                              newItems[index] = { ...newItems[index], correct_answer: e.target.value }
-                              // 정답 텍스트가 보기 중 하나와 일치하면 correct_index도 업데이트
-                              const choices = [
-                                newItems[index].choice1.trim(),
-                                newItems[index].choice2.trim(),
-                                newItems[index].choice3.trim(),
-                                newItems[index].choice4.trim()
-                              ]
-                              const matchedIndex = choices.findIndex(choice => choice === e.target.value.trim())
-                              if (matchedIndex !== -1) {
-                                newItems[index].correct_index = matchedIndex
-                              }
+                              newItems[index] = { ...newItems[index], correct_index: parseInt(v) }
                               setItems(newItems)
                             }}
-                            placeholder="보기 중 하나와 동일하게 입력"
-                          />
-                          {item.correct_answer && item.correct_answer.trim() && (() => {
-                            const choices = [
-                              item.choice1.trim(),
-                              item.choice2.trim(),
-                              item.choice3.trim(),
-                              item.choice4.trim()
-                            ]
-                            const matchedIndex = choices.findIndex(choice => choice === item.correct_answer?.trim())
-                            if (matchedIndex === -1) {
-                              return <p className="text-sm text-red-500 mt-1">보기 중 하나와 일치하지 않습니다.</p>
-                            }
-                            return <p className="text-sm text-green-500 mt-1">보기 {matchedIndex + 1}과 일치합니다.</p>
-                          })()}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="정답 선택" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="0">보기1: {item.choice1 || "(입력 필요)"}</SelectItem>
+                              <SelectItem value="1">보기2: {item.choice2 || "(입력 필요)"}</SelectItem>
+                              <SelectItem value="2">보기3: {item.choice3 || "(입력 필요)"}</SelectItem>
+                              <SelectItem value="3">보기4: {item.choice4 || "(입력 필요)"}</SelectItem>
+                            </SelectContent>
+                          </Select>
                         </div>
                       </div>
                     </Card>
@@ -1117,17 +1053,27 @@ export function LearningManagement({
                       onClick={() => {
                         setEditItems([
                           ...editItems,
-                          {
-                            word_text: "",
-                            choice1: "",
-                            choice2: "",
-                            choice3: "",
-                            choice4: "",
-                            correct_index: 0,
-                            correct_answer: "",
-                            image_url: "",
-                            audio_url: "",
-                          },
+                          <div>
+                            <Label>정답 *</Label>
+                            <Select
+                              value={item.correct_index.toString()}
+                              onValueChange={(v) => {
+                                const newItems = [...editItems]
+                                newItems[index] = { ...newItems[index], correct_index: parseInt(v) }
+                                setEditItems(newItems)
+                              }}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="정답 선택" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="0">보기1: {item.choice1 || "(입력 필요)"}</SelectItem>
+                                <SelectItem value="1">보기2: {item.choice2 || "(입력 필요)"}</SelectItem>
+                                <SelectItem value="2">보기3: {item.choice3 || "(입력 필요)"}</SelectItem>
+                                <SelectItem value="3">보기4: {item.choice4 || "(입력 필요)"}</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
                         ])
                       }}
                     >
@@ -1285,40 +1231,25 @@ export function LearningManagement({
                             </div>
                           </div>
                           <div>
-                            <Label>정답 * (보기 중 하나와 동일하게 입력)</Label>
-                            <Input
-                              value={item.correct_answer || ""}
-                              onChange={(e) => {
+                            <Label>정답 *</Label>
+                            <Select
+                              value={item.correct_index.toString()}
+                              onValueChange={(v) => {
                                 const newItems = [...editItems]
-                                newItems[index] = { ...newItems[index], correct_answer: e.target.value }
-                                // 정답 텍스트가 보기 중 하나와 일치하면 correct_index도 업데이트
-                                const choices = [
-                                  newItems[index].choice1.trim(),
-                                  newItems[index].choice2.trim(),
-                                  newItems[index].choice3.trim(),
-                                  newItems[index].choice4.trim()
-                                ]
-                                const matchedIndex = choices.findIndex(choice => choice === e.target.value.trim())
-                                if (matchedIndex !== -1) {
-                                  newItems[index].correct_index = matchedIndex
-                                }
+                                newItems[index] = { ...newItems[index], correct_index: parseInt(v) }
                                 setEditItems(newItems)
                               }}
-                              placeholder="보기 중 하나와 동일하게 입력"
-                            />
-                            {item.correct_answer && item.correct_answer.trim() && (() => {
-                              const choices = [
-                                item.choice1.trim(),
-                                item.choice2.trim(),
-                                item.choice3.trim(),
-                                item.choice4.trim()
-                              ]
-                              const matchedIndex = choices.findIndex(choice => choice === item.correct_answer?.trim())
-                              if (matchedIndex === -1) {
-                                return <p className="text-sm text-red-500 mt-1">보기 중 하나와 일치하지 않습니다.</p>
-                              }
-                              return <p className="text-sm text-green-500 mt-1">보기 {matchedIndex + 1}과 일치합니다.</p>
-                            })()}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="정답 선택" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="0">보기1: {item.choice1 || "(입력 필요)"}</SelectItem>
+                                <SelectItem value="1">보기2: {item.choice2 || "(입력 필요)"}</SelectItem>
+                                <SelectItem value="2">보기3: {item.choice3 || "(입력 필요)"}</SelectItem>
+                                <SelectItem value="3">보기4: {item.choice4 || "(입력 필요)"}</SelectItem>
+                              </SelectContent>
+                            </Select>
                           </div>
                         </div>
                       </Card>
