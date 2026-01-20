@@ -969,7 +969,16 @@ export function LearningContent({
                           className="w-full justify-start"
                           onClick={() => {
                             const newAnswers = { ...quizAnswers, [answerKey]: idx }
-                            console.log("Setting quiz answer:", { answerKey, idx, phase, itemId: currentItem.id, currentIndex })
+                            console.log("Setting quiz answer:", { 
+                              answerKey, 
+                              selectedChoiceIndex: idx, 
+                              phase, 
+                              itemId: currentItem.id, 
+                              currentIndex,
+                              wordText: currentItem.payloadJson?.word_text,
+                              correctIndex: currentItem.payloadJson?.correct_index,
+                              newAnswers,
+                            })
                             setQuizAnswers(newAnswers)
                           }}
                         >
