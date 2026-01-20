@@ -280,10 +280,12 @@ export function LearningContent({
       if (!isReviewMode) {
         const score = data.score !== null && data.score !== undefined ? data.score : 0
         setCompletedScore(score)
-        setCompletedAnswers(quizAnswers)
+        // 정규화된 quizAnswers를 저장 (서버에 보낸 것과 동일한 형태)
+        setCompletedAnswers(normalizedQuizAnswers)
         console.log("Setting completed answers:", {
           phase,
-          quizAnswers,
+          originalQuizAnswers: quizAnswers,
+          normalizedQuizAnswers,
           score,
         })
         setShowResultDialog(true)
@@ -561,8 +563,8 @@ export function LearningContent({
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            {module.items.map((item, arrayIndex) => {
-              // completedAnswers 정규화 (키가 문자열일 수 있음)
+            {/* completedAnswers 정규화 (한 번만 실행) */}
+            {(() => {
               const normalizedCompletedAnswers: Record<number, number> = {}
               Object.keys(completedAnswers).forEach((key) => {
                 const numKey = Number(key)
@@ -574,23 +576,35 @@ export function LearningContent({
                 }
               })
               
-              const correctIndex = Number(getCorrectAnswer(item)) // 숫자로 변환
-              const studentAnswer = normalizedCompletedAnswers[arrayIndex]
-              const isCorrectAnswer = studentAnswer !== undefined && !isNaN(studentAnswer) && studentAnswer === correctIndex
+              // module.items를 order로 정렬
+              const sortedItems = [...module.items].sort((a, b) => a.order - b.order)
               
-              const choices = [
-                item.payloadJson?.choice1,
-                item.payloadJson?.choice2,
-                item.payloadJson?.choice3,
-                item.payloadJson?.choice4,
-              ].filter(Boolean)
+              return sortedItems.map((item, arrayIndex) => {
+                const correctIndex = Number(getCorrectAnswer(item)) // 숫자로 변환
+                const studentAnswer = normalizedCompletedAnswers[arrayIndex]
+                const isCorrectAnswer = studentAnswer !== undefined && !isNaN(studentAnswer) && studentAnswer === correctIndex
+                
+                const choices = [
+                  item.payloadJson?.choice1,
+                  item.payloadJson?.choice2,
+                  item.payloadJson?.choice3,
+                  item.payloadJson?.choice4,
+                ].filter(Boolean)
 
-              console.log(`결과 표시 - Item ${arrayIndex}:`, {
-                wordText: item.payloadJson?.word_text,
-                correctIndex,
-                studentAnswer,
-                isCorrectAnswer,
-              })
+                console.log(`결과 표시 - Item ${arrayIndex} (order: ${item.order}):`, {
+                  wordText: item.payloadJson?.word_text,
+                  correctIndex,
+                  correctIndexType: typeof correctIndex,
+                  studentAnswer,
+                  studentAnswerType: typeof studentAnswer,
+                  isCorrectAnswer,
+                  choices: {
+                    0: item.payloadJson?.choice1,
+                    1: item.payloadJson?.choice2,
+                    2: item.payloadJson?.choice3,
+                    3: item.payloadJson?.choice4,
+                  },
+                })
 
               return (
                 <Card key={arrayIndex} className={isCorrectAnswer ? "border-green-500" : "border-red-500"}>
@@ -640,7 +654,8 @@ export function LearningContent({
                   </CardContent>
                 </Card>
               )
-            })}
+              })
+            })()}
           </div>
           <DialogFooter>
             <Button onClick={() => {
