@@ -1244,10 +1244,10 @@ export function LearningManagement({
                                 <SelectValue placeholder="정답 선택" />
                               </SelectTrigger>
                               <SelectContent>
-                                <SelectItem value="0">보기1: {item.choice1 || "(입력 필요)"}</SelectItem>
-                                <SelectItem value="1">보기2: {item.choice2 || "(입력 필요)"}</SelectItem>
-                                <SelectItem value="2">보기3: {item.choice3 || "(입력 필요)"}</SelectItem>
-                                <SelectItem value="3">보기4: {item.choice4 || "(입력 필요)"}</SelectItem>
+                                <SelectItem value="0">1</SelectItem>
+                                <SelectItem value="1">2</SelectItem>
+                                <SelectItem value="2">3</SelectItem>
+                                <SelectItem value="3">4</SelectItem>
                               </SelectContent>
                             </Select>
                           </div>
