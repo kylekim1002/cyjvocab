@@ -386,6 +386,7 @@ export function LearningContent({
       if (!isReviewMode) {
         const score = data.score !== null && data.score !== undefined ? data.score : 0
         setCompletedScore(score)
+        // 서버에서 계산된 정확한 답안 사용 (클라이언트의 quizAnswers를 그대로 사용)
         // 최종테스트인 경우 변환된 answersToSend 사용, 아니면 원본 quizAnswers 사용
         const answersForDisplay = phase === "finaltest" && finalTestItems.length > 0
           ? (answersToSend || quizAnswers)
@@ -395,6 +396,8 @@ export function LearningContent({
           phase,
           answersForDisplay,
           originalQuizAnswers: quizAnswers,
+          answersToSend,
+          score,
         })
         setShowResultDialog(true)
         
@@ -676,6 +679,7 @@ export function LearningContent({
           <div className="space-y-4">
             {(phase === "finaltest" && finalTestItems.length > 0 ? finalTestItems : module.items).map((item, idx) => {
               // correct_index는 0-based 인덱스 (0, 1, 2, 3)
+              // 정답 선택지의 인덱스 (0=첫번째 선택지, 1=두번째 선택지, ...)
               const correctIndex = Number(item.payloadJson?.correct_index ?? -1)
               
               // 답안 찾기: 인덱스를 먼저 시도, 없으면 item.id로 시도
@@ -683,6 +687,7 @@ export function LearningContent({
               let studentAnswer: number | undefined = undefined
               
               // 1. 인덱스로 먼저 시도 (일반 테스트는 인덱스 사용)
+              // completedAnswers[문항인덱스] = 선택한 선택지의 인덱스 (0, 1, 2, 3)
               if (completedAnswers[idx] !== undefined) {
                 studentAnswer = Number(completedAnswers[idx])
               } else if (completedAnswers[String(idx)] !== undefined) {
@@ -698,20 +703,25 @@ export function LearningContent({
                 }
               }
               
-              // 정답 비교: studentAnswer와 correctIndex가 일치하는지 확인
+              // 정답 비교: studentAnswer(선택한 선택지 인덱스)와 correctIndex(정답 선택지 인덱스)가 일치하는지 확인
               // 둘 다 숫자로 변환하여 정확히 비교
+              // studentAnswer는 사용자가 선택한 선택지의 인덱스 (0, 1, 2, 3)
+              // correctIndex는 정답 선택지의 인덱스 (0, 1, 2, 3)
               const isCorrectAnswer = studentAnswer !== undefined && 
                                      studentAnswer !== null && 
                                      !isNaN(studentAnswer) &&
                                      !isNaN(correctIndex) &&
                                      correctIndex >= 0 &&
                                      correctIndex <= 3 &&
+                                     studentAnswer >= 0 &&
+                                     studentAnswer <= 3 &&
                                      studentAnswer === correctIndex
               
               console.log("Result check:", {
                 phase,
                 idx,
                 itemId: item.id,
+                wordText: item.payloadJson?.word_text,
                 studentAnswer,
                 correctIndex,
                 isCorrectAnswer,
@@ -720,6 +730,12 @@ export function LearningContent({
                 completedAnswersKeys: Object.keys(completedAnswers),
                 completedAnswers: completedAnswers,
                 itemPayload: item.payloadJson,
+                choices: [
+                  item.payloadJson?.choice1,
+                  item.payloadJson?.choice2,
+                  item.payloadJson?.choice3,
+                  item.payloadJson?.choice4,
+                ],
               })
               const choices = [
                 item.payloadJson?.choice1,
