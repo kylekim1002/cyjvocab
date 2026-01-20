@@ -33,7 +33,9 @@ export default async function StatsPage() {
       },
       module: {
         include: {
-          items: true,
+          items: {
+            orderBy: { order: "asc" }, // order로 정렬 보장
+          },
         },
       },
     },
@@ -62,10 +64,27 @@ export default async function StatsPage() {
     let correctCount = 0
 
     // 정답 개수 계산
-    session.module.items.forEach((item, idx) => {
+    // items를 order로 정렬 (이중 보장)
+    const sortedItems = [...session.module.items].sort((a, b) => a.order - b.order)
+    
+    // quizAnswers 정규화 (키가 문자열일 수 있음)
+    const normalizedQuizAnswers: Record<number, number> = {}
+    Object.keys(quizAnswers).forEach((key) => {
+      const numKey = Number(key)
+      if (!isNaN(numKey)) {
+        const numValue = Number(quizAnswers[key])
+        if (!isNaN(numValue)) {
+          normalizedQuizAnswers[numKey] = numValue
+        }
+      }
+    })
+    
+    sortedItems.forEach((item, arrayIndex) => {
       const payload = item.payloadJson as any
-      const correctIndex = payload.correct_index
-      if (quizAnswers[idx] === correctIndex) {
+      const correctIndex = Number(payload.correct_index) // 숫자로 변환
+      const studentAnswer = normalizedQuizAnswers[arrayIndex]
+      
+      if (studentAnswer !== undefined && !isNaN(studentAnswer) && studentAnswer === correctIndex) {
         correctCount++
       }
     })

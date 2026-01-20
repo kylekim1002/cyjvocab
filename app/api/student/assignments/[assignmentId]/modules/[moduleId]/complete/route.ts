@@ -89,7 +89,9 @@ export async function POST(
     const module = await prisma.learningModule.findUnique({
       where: { id: params.moduleId },
       include: {
-        items: true,
+        items: {
+          orderBy: { order: "asc" }, // order로 정렬 보장
+        },
       },
     })
 
@@ -105,20 +107,78 @@ export async function POST(
     if (module.type === "TYPE_A" || module.type === "TYPE_B") {
       const payload = studySession.payloadJson as any
       // 요청에서 온 quizAnswers를 우선 사용, 없으면 세션의 quizAnswers 사용
-      const quizAnswers = requestQuizAnswers || payload.quizAnswers || {}
+      let rawQuizAnswers = requestQuizAnswers || payload.quizAnswers || {}
+      
+      // quizAnswers의 키를 모두 숫자로 정규화
+      const normalizedQuizAnswers: Record<number, number> = {}
+      Object.keys(rawQuizAnswers).forEach((key) => {
+        const numKey = Number(key)
+        if (!isNaN(numKey)) {
+          const numValue = Number(rawQuizAnswers[key])
+          if (!isNaN(numValue)) {
+            normalizedQuizAnswers[numKey] = numValue
+          }
+        }
+      })
+      
       let correctCount = 0
 
-      module.items.forEach((item, idx) => {
-        if (!item.payloadJson) return
-        const payload = item.payloadJson as any
-        const correctIndex = payload.correct_index
-        if (quizAnswers[idx] === correctIndex) {
+      // items를 order로 정렬 (이중 보장)
+      const sortedItems = [...module.items].sort((a, b) => a.order - b.order)
+
+      console.log("=== 점수 계산 시작 ===")
+      console.log("정규화된 quizAnswers:", normalizedQuizAnswers)
+      console.log("모듈 items 개수:", sortedItems.length)
+
+      sortedItems.forEach((item, arrayIndex) => {
+        if (!item.payloadJson) {
+          console.log(`Item ${arrayIndex}: payloadJson 없음`)
+          return
+        }
+        
+        const itemPayload = item.payloadJson as any
+        const correctIndex = Number(itemPayload.correct_index)
+        const studentAnswer = normalizedQuizAnswers[arrayIndex]
+        
+        // undefined 체크
+        if (studentAnswer === undefined || isNaN(studentAnswer)) {
+          console.log(`Item ${arrayIndex} (order: ${item.order}, word: ${itemPayload.word_text}): 답안 없음`, {
+            arrayIndex,
+            order: item.order,
+            correctIndex,
+            studentAnswer: undefined,
+            match: false,
+          })
+          return
+        }
+        
+        const isCorrect = studentAnswer === correctIndex
+        
+        // 상세 디버깅 로그
+        console.log(`Item ${arrayIndex} (order: ${item.order}):`, {
+          wordText: itemPayload.word_text,
+          correctIndex,
+          correctIndexType: typeof correctIndex,
+          studentAnswer,
+          studentAnswerType: typeof studentAnswer,
+          match: isCorrect,
+          choices: {
+            0: itemPayload.choice1,
+            1: itemPayload.choice2,
+            2: itemPayload.choice3,
+            3: itemPayload.choice4,
+          },
+        })
+        
+        if (isCorrect) {
           correctCount++
         }
       })
 
-      score = Math.round((correctCount / module.items.length) * 100)
-      console.log("Score calculated:", { correctCount, total: module.items.length, score })
+      score = Math.round((correctCount / sortedItems.length) * 100)
+      console.log("=== 점수 계산 완료 ===")
+      console.log("정답 개수:", correctCount, "/", sortedItems.length)
+      console.log("최종 점수:", score)
     }
 
     // 세션 완료 처리

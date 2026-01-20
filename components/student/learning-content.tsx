@@ -219,6 +219,21 @@ export function LearningContent({
         currentIndex,
       })
       
+      // quizAnswers의 키를 모두 숫자로 정규화하여 전달
+      const normalizedQuizAnswers: Record<number, number> = {}
+      Object.keys(quizAnswers).forEach((key) => {
+        const numKey = Number(key)
+        if (!isNaN(numKey)) {
+          normalizedQuizAnswers[numKey] = Number(quizAnswers[key])
+        }
+      })
+      
+      console.log("Sending quiz answers:", {
+        original: quizAnswers,
+        normalized: normalizedQuizAnswers,
+        moduleItemsCount: module.items.length,
+      })
+      
       // quizAnswers와 phase를 함께 전달
       const response = await fetch(
         `/api/student/assignments/${assignmentId}/modules/${module.id}/complete`,
@@ -228,7 +243,7 @@ export function LearningContent({
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            quizAnswers,
+            quizAnswers: normalizedQuizAnswers,
             currentIndex,
             phase,
             isReview: isReviewMode,
@@ -513,13 +528,14 @@ export function LearningContent({
 
   // 정답 확인 함수
   const getCorrectAnswer = (item: LearningItem) => {
-    return item.payloadJson?.correct_index ?? -1
+    return Number(item.payloadJson?.correct_index ?? -1) // 숫자로 변환
   }
 
   // 정오 확인 함수
   const isCorrect = (itemIndex: number) => {
     const correctIndex = getCorrectAnswer(module.items[itemIndex])
-    return completedAnswers[itemIndex] === correctIndex
+    const studentAnswer = Number(completedAnswers[itemIndex] ?? -1) // 숫자로 변환
+    return studentAnswer === correctIndex
   }
 
   return (
@@ -545,10 +561,23 @@ export function LearningContent({
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            {module.items.map((item, idx) => {
-              const correctIndex = getCorrectAnswer(item)
-              const studentAnswer = completedAnswers[idx]
-              const isCorrectAnswer = studentAnswer === correctIndex
+            {module.items.map((item, arrayIndex) => {
+              // completedAnswers 정규화 (키가 문자열일 수 있음)
+              const normalizedCompletedAnswers: Record<number, number> = {}
+              Object.keys(completedAnswers).forEach((key) => {
+                const numKey = Number(key)
+                if (!isNaN(numKey)) {
+                  const numValue = Number(completedAnswers[key])
+                  if (!isNaN(numValue)) {
+                    normalizedCompletedAnswers[numKey] = numValue
+                  }
+                }
+              })
+              
+              const correctIndex = Number(getCorrectAnswer(item)) // 숫자로 변환
+              const studentAnswer = normalizedCompletedAnswers[arrayIndex]
+              const isCorrectAnswer = studentAnswer !== undefined && !isNaN(studentAnswer) && studentAnswer === correctIndex
+              
               const choices = [
                 item.payloadJson?.choice1,
                 item.payloadJson?.choice2,
@@ -556,12 +585,19 @@ export function LearningContent({
                 item.payloadJson?.choice4,
               ].filter(Boolean)
 
+              console.log(`결과 표시 - Item ${arrayIndex}:`, {
+                wordText: item.payloadJson?.word_text,
+                correctIndex,
+                studentAnswer,
+                isCorrectAnswer,
+              })
+
               return (
-                <Card key={idx} className={isCorrectAnswer ? "border-green-500" : "border-red-500"}>
+                <Card key={arrayIndex} className={isCorrectAnswer ? "border-green-500" : "border-red-500"}>
                   <CardContent className="p-4">
                     <div className="flex items-start justify-between mb-2">
                       <div className="flex-1">
-                        <p className="font-medium text-lg">{item.payloadJson?.word_text || `문항 ${idx + 1}`}</p>
+                        <p className="font-medium text-lg">{item.payloadJson?.word_text || `문항 ${arrayIndex + 1}`}</p>
                         {module.type === "TYPE_B" && item.payloadJson?.image_url && (
                           <img
                             src={item.payloadJson.image_url}
@@ -719,7 +755,19 @@ export function LearningContent({
                           }
                           className="w-full justify-start"
                           onClick={() => {
-                            setQuizAnswers({ ...quizAnswers, [answerKey]: idx })
+                            // 키를 명시적으로 숫자로 변환하여 저장
+                            const newAnswers = { ...quizAnswers }
+                            const numKey = Number(answerKey)
+                            newAnswers[numKey] = Number(idx)
+                            console.log("Setting quiz answer:", {
+                              answerKey,
+                              numKey,
+                              selectedChoiceIndex: idx,
+                              correctIndex: currentItem.payloadJson?.correct_index,
+                              wordText: currentItem.payloadJson?.word_text,
+                              newAnswers,
+                            })
+                            setQuizAnswers(newAnswers)
                           }}
                         >
                           {choice}
@@ -763,9 +811,13 @@ export function LearningContent({
                           }
                           className="w-full justify-start"
                           onClick={() => {
-                            const newAnswers = { ...quizAnswers, [answerKey]: idx }
+                            // 키를 명시적으로 숫자로 변환하여 저장
+                            const newAnswers = { ...quizAnswers }
+                            const numKey = Number(answerKey)
+                            newAnswers[numKey] = Number(idx)
                             console.log("Setting quiz answer:", { 
-                              answerKey, 
+                              answerKey,
+                              numKey,
                               selectedChoiceIndex: idx, 
                               phase, 
                               itemId: currentItem.id, 
