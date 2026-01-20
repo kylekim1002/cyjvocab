@@ -1053,27 +1053,16 @@ export function LearningManagement({
                       onClick={() => {
                         setEditItems([
                           ...editItems,
-                          <div>
-                            <Label>정답 *</Label>
-                            <Select
-                              value={item.correct_index.toString()}
-                              onValueChange={(v) => {
-                                const newItems = [...editItems]
-                                newItems[index] = { ...newItems[index], correct_index: parseInt(v) }
-                                setEditItems(newItems)
-                              }}
-                            >
-                              <SelectTrigger>
-                                <SelectValue placeholder="정답 선택" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="0">보기1: {item.choice1 || "(입력 필요)"}</SelectItem>
-                                <SelectItem value="1">보기2: {item.choice2 || "(입력 필요)"}</SelectItem>
-                                <SelectItem value="2">보기3: {item.choice3 || "(입력 필요)"}</SelectItem>
-                                <SelectItem value="3">보기4: {item.choice4 || "(입력 필요)"}</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
+                          {
+                            word_text: "",
+                            choice1: "",
+                            choice2: "",
+                            choice3: "",
+                            choice4: "",
+                            correct_index: 0,
+                            image_url: "",
+                            audio_url: "",
+                          },
                         ])
                       }}
                     >
