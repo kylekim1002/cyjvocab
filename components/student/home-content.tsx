@@ -31,7 +31,6 @@ interface PhaseProgress {
   wordListProgress: number
   memorizationProgress: number
   testScore: number | null
-  finalTestScore: number | null
 }
 
 interface StudentHomeContentProps {
@@ -52,7 +51,6 @@ export function StudentHomeContent({ assignments: initialAssignments, modulePhas
         wordListProgress: 0,
         memorizationProgress: 0,
         testScore: null,
-        finalTestScore: null,
       }
       
       // 단어목록, 암기학습, 테스트 모두 완료되었는지 확인
@@ -60,14 +58,12 @@ export function StudentHomeContent({ assignments: initialAssignments, modulePhas
       const wordListCompleted = phaseProgress.wordListProgress >= 100
       const memorizationCompleted = phaseProgress.memorizationProgress >= 100
       const testCompleted = phaseProgress.testScore !== null && phaseProgress.testScore !== undefined
-      const finalTestCompleted = phaseProgress.finalTestScore !== null && phaseProgress.finalTestScore !== undefined
       
       // 실제로 학습을 시작했는지 확인 (progress가 있거나 세션이 있어야 함)
       const hasStarted = progress !== undefined || 
                         wordListCompleted || 
                         memorizationCompleted || 
-                        testCompleted ||
-                        finalTestCompleted
+                        testCompleted
       
       return {
         ...mod,
@@ -76,7 +72,6 @@ export function StudentHomeContent({ assignments: initialAssignments, modulePhas
         wordListCompleted,
         memorizationCompleted,
         testCompleted,
-        finalTestCompleted,
         hasStarted, // 학습 시작 여부
       }
     })
@@ -92,7 +87,7 @@ export function StudentHomeContent({ assignments: initialAssignments, modulePhas
     // 한 가지라도 완료되지 않았다면 완료로 표시하지 않음
     const allModulesCompleted = moduleProgresses.length > 0 &&
       moduleProgresses.every((p) => 
-        p.wordListCompleted && p.memorizationCompleted && p.testCompleted && p.finalTestCompleted
+        p.wordListCompleted && p.memorizationCompleted && p.testCompleted
       )
 
     return {
@@ -149,7 +144,6 @@ export function StudentHomeContent({ assignments: initialAssignments, modulePhas
                       wordListProgress: 0,
                       memorizationProgress: 0,
                       testScore: null,
-                      finalTestScore: null,
                     }
 
                     return (
@@ -194,22 +188,6 @@ export function StudentHomeContent({ assignments: initialAssignments, modulePhas
                             <span className="text-sm text-muted-foreground">
                               {phaseProgress.testScore !== null && phaseProgress.testScore !== undefined
                                 ? `최고점 ${phaseProgress.testScore}점`
-                                : "최고점 응시전"}
-                            </span>
-                          </div>
-
-                          <div className="w-px h-6 bg-gray-300"></div>
-
-                          {/* 최종테스트 버튼 */}
-                          <div className="flex items-center gap-2">
-                            <Link href={`/student/learn/${assignment.id}/${mod.module.id}?phase=finaltest`}>
-                              <Button size="sm" variant="outline" className="h-8">
-                                최종테스트
-                              </Button>
-                            </Link>
-                            <span className="text-sm text-muted-foreground">
-                              {phaseProgress.finalTestScore !== null && phaseProgress.finalTestScore !== undefined
-                                ? `최고점 ${phaseProgress.finalTestScore}점`
                                 : "최고점 응시전"}
                             </span>
                           </div>

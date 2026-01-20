@@ -102,217 +102,23 @@ export async function POST(
 
     // 점수 계산 (TYPE_A, TYPE_B인 경우)
     let score = null
-    // payloadJson이 null이거나 파싱 실패 시 안전하게 처리
-    let payload: any = {}
-    try {
-      payload = (studySession.payloadJson as any) || {}
-    } catch (error) {
-      console.error("Error parsing payloadJson:", error)
-      payload = {}
-    }
-    // 클라이언트가 명시한 phase가 있으면 최우선 (payloadJson이 덮어써져도 안전)
-    const phase = requestPhase || payload.phase || "test"
-    
     if (module.type === "TYPE_A" || module.type === "TYPE_B") {
+      const payload = studySession.payloadJson as any
       // 요청에서 온 quizAnswers를 우선 사용, 없으면 세션의 quizAnswers 사용
       const quizAnswers = requestQuizAnswers || payload.quizAnswers || {}
       let correctCount = 0
-      let totalItems = 0
 
-      // 최종테스트인 경우 finalTestItems 사용
-      if (phase === "finaltest") {
-        // finalTestItems가 없으면 에러
-        if (!payload.finalTestItems || !Array.isArray(payload.finalTestItems)) {
-          console.error("Final test: finalTestItems not found or invalid", {
-            hasFinalTestItems: !!payload.finalTestItems,
-            finalTestItemsType: typeof payload.finalTestItems,
-            payloadKeys: Object.keys(payload),
-          })
-          return NextResponse.json(
-            { error: "최종테스트 데이터를 찾을 수 없습니다." },
-            { status: 400 }
-          )
+      module.items.forEach((item, idx) => {
+        if (!item.payloadJson) return
+        const payload = item.payloadJson as any
+        const correctIndex = payload.correct_index
+        if (quizAnswers[idx] === correctIndex) {
+          correctCount++
         }
-        
-        totalItems = payload.finalTestItems.length
-        
-        // quizAnswers를 정규화: 최종테스트는 item.id를 키로 사용
-        // 클라이언트에서 item.id를 키로 보내므로, 그대로 사용
-        const normalizedAnswers: Record<string | number, number> = {}
-        Object.keys(quizAnswers).forEach(key => {
-          // 키가 숫자 문자열이면 숫자로, 아니면 문자열로 유지 (item.id는 문자열일 수 있음)
-          const answerValue = Number(quizAnswers[key as keyof typeof quizAnswers])
-          if (!isNaN(answerValue)) {
-            normalizedAnswers[key] = answerValue
-          }
-        })
-        
-        console.log("Final test scoring:", {
-          totalItems,
-          quizAnswersCount: Object.keys(quizAnswers).length,
-          normalizedAnswersCount: Object.keys(normalizedAnswers).length,
-          normalizedAnswers,
-          finalTestItemIds: payload.finalTestItems.map((item: any, idx: number) => item.id || idx),
-        })
-        
-        // 최종테스트 점수 계산: 각 문항의 정답과 학생 답안 비교
-        // 클라이언트가 인덱스 또는 item.id를 키로 보낼 수 있으므로 둘 다 시도
-        for (let idx = 0; idx < payload.finalTestItems.length; idx++) {
-          const item = payload.finalTestItems[idx]
-          if (!item || !item.payloadJson) {
-            console.warn(`Final test item ${idx}: missing item or payloadJson`)
-            continue
-          }
-          
-          const correctIndex = Number(item.payloadJson.correct_index)
-          
-          // 답안 찾기: item.id를 먼저 시도 (클라이언트가 변환해서 보냄)
-          // 없으면 인덱스로 시도 (하위 호환성)
-          let studentAnswer: number | undefined = undefined
-          
-          // 1. item.id로 먼저 시도 (클라이언트가 변환해서 보냄)
-          if (item.id) {
-            if (normalizedAnswers[item.id] !== undefined) {
-              studentAnswer = normalizedAnswers[item.id]
-            } else if (normalizedAnswers[String(item.id)] !== undefined) {
-              studentAnswer = normalizedAnswers[String(item.id)]
-            }
-          }
-          
-          // 2. item.id로 찾지 못했으면 인덱스로 시도 (하위 호환성)
-          if (studentAnswer === undefined) {
-            if (normalizedAnswers[idx] !== undefined) {
-              studentAnswer = normalizedAnswers[idx]
-            } else if (normalizedAnswers[String(idx)] !== undefined) {
-              studentAnswer = normalizedAnswers[String(idx)]
-            }
-          }
-          
-          // 정답 인덱스 유효성 검증
-          if (isNaN(correctIndex) || correctIndex < 0 || correctIndex > 3) {
-            console.error(`Final test item ${idx}: invalid correctIndex`, {
-              correctIndex,
-              payloadJson: item.payloadJson,
-            })
-            continue
-          }
-          
-          // 학생 답안과 정답 비교
-          const isCorrect = studentAnswer !== undefined && 
-                           studentAnswer !== null && 
-                           !isNaN(Number(studentAnswer)) &&
-                           Number(studentAnswer) === correctIndex
-          
-          console.log(`Final test item ${idx + 1}/${totalItems} (ID: ${item.id || idx}):`, {
-            word: item.payloadJson.word_text,
-            correctIndex,
-            studentAnswer,
-            isCorrect,
-            itemId: item.id,
-            triedKeys: [item.id, String(item.id), idx, String(idx)],
-            foundInNormalized: {
-              byItemId: item.id ? normalizedAnswers[item.id] : undefined,
-              byItemIdString: item.id ? normalizedAnswers[String(item.id)] : undefined,
-              byIndex: normalizedAnswers[idx],
-              byIndexString: normalizedAnswers[String(idx)],
-            },
-            choices: [
-              item.payloadJson.choice1,
-              item.payloadJson.choice2,
-              item.payloadJson.choice3,
-              item.payloadJson.choice4,
-            ],
-          })
-          
-          if (isCorrect) {
-            correctCount++
-          }
-        }
-      } else {
-        // 일반 테스트인 경우 module.items 사용
-        totalItems = module.items.length
-        
-        // quizAnswers를 정규화 (키를 숫자로 변환)
-        // 일반 테스트는 인덱스를 키로 사용
-        const normalizedAnswers: Record<number, number> = {}
-        Object.keys(quizAnswers).forEach(key => {
-          const numKey = Number(key)
-          if (!isNaN(numKey)) {
-            normalizedAnswers[numKey] = Number(quizAnswers[key as keyof typeof quizAnswers])
-          }
-        })
-        
-        console.log("Regular test scoring:", {
-          totalItems,
-          quizAnswersCount: Object.keys(quizAnswers).length,
-          normalizedAnswersCount: Object.keys(normalizedAnswers).length,
-          normalizedAnswers,
-        })
-        
-        module.items.forEach((item, idx) => {
-          if (!item.payloadJson) {
-            console.warn(`Regular test item ${idx}: missing payloadJson`)
-            return
-          }
-          const itemPayload = item.payloadJson as any
-          const correctIndex = Number(itemPayload.correct_index)
-          const studentAnswer = normalizedAnswers[idx]
-          
-          const isCorrect = studentAnswer !== undefined && 
-                           studentAnswer !== null && 
-                           !isNaN(Number(studentAnswer)) &&
-                           Number(studentAnswer) === correctIndex
-          
-          if (isCorrect) {
-            correctCount++
-          }
-        })
-      }
+      })
 
-      // 점수 계산: 테스트와 최종테스트 모두 정답률(%)로 계산
-      // 공식: (맞은 문항 수 / 총 문항 수) × 100
-      // 예: 10문항 중 9문항 정답 → 90점
-      // 예: 10문항 중 5문항 정답 → 50점
-      // 예: 20문항 중 17문항 정답 → 85점
-      
-      // 점수 계산 전 검증
-      if (totalItems <= 0) {
-        console.error("점수 계산 오류: totalItems가 0 이하", { 
-          phase, 
-          correctCount, 
-          totalItems,
-          hasFinalTestItems: phase === "finaltest" ? !!payload.finalTestItems : "N/A",
-          finalTestItemsLength: phase === "finaltest" ? (payload.finalTestItems?.length || 0) : "N/A",
-        })
-        score = 0
-      } else if (correctCount < 0) {
-        console.error("점수 계산 오류: correctCount가 음수", { correctCount, totalItems })
-        score = 0
-      } else {
-        // 정확한 백분율 계산: (맞은 문항 수 / 총 문항 수) × 100
-        const percentage = (correctCount / totalItems) * 100
-        score = Math.round(percentage)
-        
-        // 점수 검증: 0~100 범위 확인
-        if (score < 0) {
-          console.error("점수 계산 오류: 점수가 음수", { score, correctCount, totalItems, percentage })
-          score = 0
-        } else if (score > 100) {
-          console.error("점수 계산 오류: 점수가 100 초과", { score, correctCount, totalItems, percentage })
-          score = 100
-        }
-        
-        // 점수 계산 검증 로그 (상세)
-        console.log("=== 최종 점수 계산 결과 ===", {
-          phase,
-          correctCount,
-          totalItems,
-          percentage: percentage.toFixed(2),
-          score,
-          formula: `(${correctCount} / ${totalItems}) × 100 = ${percentage.toFixed(2)}% → ${score}점`,
-          quizAnswersCount: Object.keys(quizAnswers).length,
-        })
-      }
+      score = Math.round((correctCount / module.items.length) * 100)
+      console.log("Score calculated:", { correctCount, total: module.items.length, score })
     }
 
     // 세션 완료 처리
@@ -365,17 +171,13 @@ export async function POST(
       })
 
       if (assignment) {
-        // score_log에 기록 (복습 여부 및 최종테스트 여부 구분)
-        const activityType = phase === "finaltest" 
-          ? (isReview ? "FINAL_TEST_REVIEW" : "FINAL_TEST")
-          : (isReview ? "REVIEW" : "LEARNING")
-        
+        // score_log에 기록 (복습 여부 구분)
         await prisma.scoreLog.create({
           data: {
             studentId: session.user.studentId,
             campusId: assignment.class.campusId,
             classId: assignment.classId,
-            activityType,
+            activityType: isReview ? "REVIEW" : "LEARNING",
             score,
           },
         })

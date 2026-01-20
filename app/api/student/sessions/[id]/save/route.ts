@@ -3,36 +3,6 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth-options"
 import { prisma } from "@/lib/prisma"
 
-export async function GET(
-  request: Request,
-  { params }: { params: { id: string } }
-) {
-  const session = await getServerSession(authOptions)
-
-  if (!session?.user?.studentId) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  }
-
-  try {
-    // 세션 확인
-    const studySession = await prisma.studySession.findUnique({
-      where: { id: params.id },
-    })
-
-    if (!studySession || studySession.studentId !== session.user.studentId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
-
-    return NextResponse.json(studySession)
-  } catch (error) {
-    console.error("Get session error:", error)
-    return NextResponse.json(
-      { error: "세션 조회에 실패했습니다." },
-      { status: 500 }
-    )
-  }
-}
-
 export async function POST(
   request: Request,
   { params }: { params: { id: string } }

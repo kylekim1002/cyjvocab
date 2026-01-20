@@ -38,7 +38,7 @@ interface LearningContentProps {
   progress: Progress | null
   isReviewMode?: boolean
   completedSession?: any
-  phase?: string // wordlist, memorization, test, finaltest
+  phase?: string // wordlist, memorization, test
 }
 
 export function LearningContent({
@@ -55,17 +55,14 @@ export function LearningContent({
   const [currentIndex, setCurrentIndex] = useState(0)
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
-  // 최종테스트는 item.id를 키로, 일반 테스트는 인덱스를 키로 사용
   const [quizAnswers, setQuizAnswers] = useState<Record<string | number, number>>({})
   const [showResultDialog, setShowResultDialog] = useState(false)
   const [completedScore, setCompletedScore] = useState<number | null>(null)
-  // 최종테스트는 item.id를 키로, 일반 테스트는 인덱스를 키로 사용
   const [completedAnswers, setCompletedAnswers] = useState<Record<string | number, number>>({})
   // 단어목록/암기학습용 상태
   const [wordlistMaxIndex, setWordlistMaxIndex] = useState<number>(-1)
   const [memorizeMaxIndex, setMemorizeMaxIndex] = useState<number>(-1)
   const [showMeaning, setShowMeaning] = useState<boolean>(false) // 암기학습용 토글
-  const [finalTestItems, setFinalTestItems] = useState<LearningItem[]>([]) // 최종테스트용 아이템
 
   useEffect(() => {
     console.log("LearningContent useEffect", { inProgressSession, progress, sessionId, isReviewMode, completedSession, phase })
@@ -86,9 +83,9 @@ export function LearningContent({
       return
     }
     
-    // 테스트/최종테스트 단계에서만 세션 체크
-    if (phase === "test" || phase === "finaltest") {
-      // 진행 중인 세션이 있으면 phase 확인 후 처리
+    // 테스트 단계에서만 세션 체크
+    if (phase === "test") {
+      // 진행 중인 세션이 있으면 삭제하고 새로 시작 (완료된 학습도 포함)
       if (inProgressSession) {
         const sessionPayload = inProgressSession.payloadJson as any
         const sessionPhase = sessionPayload?.phase || "test"
@@ -122,69 +119,6 @@ export function LearningContent({
       if (!sessionId) {
         startNewSession()
       }
-      
-      // 최종테스트인 경우 세션에서 finalTestItems 가져오기
-      if (phase === "finaltest") {
-        const loadFinalTestItems = async () => {
-          if (inProgressSession?.payloadJson) {
-            const payload = inProgressSession.payloadJson as any
-            if (payload.finalTestItems) {
-              setFinalTestItems(payload.finalTestItems)
-              // 기존 quizAnswers를 item.id 기반으로 변환
-              if (payload.quizAnswers) {
-                const convertedAnswers: Record<string | number, number> = {}
-                payload.finalTestItems.forEach((item: any, idx: number) => {
-                  const itemId = item.id || idx
-                  // 기존 답안이 인덱스 기반이면 item.id로 변환
-                  if (payload.quizAnswers[idx] !== undefined) {
-                    convertedAnswers[itemId] = payload.quizAnswers[idx]
-                  } else if (payload.quizAnswers[itemId] !== undefined) {
-                    convertedAnswers[itemId] = payload.quizAnswers[itemId]
-                  }
-                })
-                setQuizAnswers(convertedAnswers)
-              }
-              return
-            }
-          }
-          if (sessionId) {
-            try {
-              const res = await fetch(`/api/student/sessions/${sessionId}`)
-              if (res.ok) {
-                const data = await res.json()
-                const payload = data.payloadJson as any
-                if (payload?.finalTestItems) {
-                  setFinalTestItems(payload.finalTestItems)
-                  // 기존 quizAnswers를 item.id 기반으로 변환
-                  if (payload.quizAnswers) {
-                    const convertedAnswers: Record<string | number, number> = {}
-                    payload.finalTestItems.forEach((item: any, idx: number) => {
-                      const itemId = item.id || idx
-                      if (payload.quizAnswers[idx] !== undefined) {
-                        convertedAnswers[itemId] = payload.quizAnswers[idx]
-                      } else if (payload.quizAnswers[itemId] !== undefined) {
-                        convertedAnswers[itemId] = payload.quizAnswers[itemId]
-                      }
-                    })
-                    setQuizAnswers(convertedAnswers)
-                  }
-                }
-              }
-            } catch (error) {
-              console.error("Failed to load final test items:", error)
-            }
-          }
-        }
-        loadFinalTestItems()
-      } else {
-        // 일반 테스트는 기존 quizAnswers 유지
-        if (inProgressSession?.payloadJson) {
-          const payload = inProgressSession.payloadJson as any
-          if (payload.quizAnswers) {
-            setQuizAnswers(payload.quizAnswers)
-          }
-        }
-      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inProgressSession, progress, isReviewMode, completedSession, phase])
@@ -194,13 +128,7 @@ export function LearningContent({
     try {
       const response = await fetch(
         `/api/student/assignments/${assignmentId}/modules/${module.id}/start`,
-        { 
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ phase }),
-        }
+        { method: "POST" }
       )
       
       if (!response.ok) {
@@ -211,27 +139,7 @@ export function LearningContent({
       const data = await response.json()
       console.log("New session started:", data.sessionId)
       setSessionId(data.sessionId)
-      
-      // 최종테스트인 경우 세션에서 finalTestItems 가져오기
-      if (phase === "finaltest" && data.sessionId) {
-        try {
-          const sessionResponse = await fetch(`/api/student/sessions/${data.sessionId}`)
-          if (sessionResponse.ok) {
-            const sessionData = await sessionResponse.json()
-            const payload = sessionData.payloadJson as any
-            if (payload?.finalTestItems) {
-              setFinalTestItems(payload.finalTestItems)
-              // quizAnswers 초기화 (최종테스트는 item.id를 키로 사용)
-              setQuizAnswers({})
-            }
-          }
-        } catch (error) {
-          console.error("Failed to load final test items:", error)
-        }
-      } else {
-        // 일반 테스트는 quizAnswers 초기화
-        setQuizAnswers({})
-      }
+      setQuizAnswers({})
     } catch (error: any) {
       console.error("Start session error:", error)
       toast({
@@ -252,8 +160,6 @@ export function LearningContent({
       const payload = {
         currentIndex,
         phase,
-        // finalTestItems는 서버에서 생성한 것을 보존하므로 클라이언트에서 보내지 않음
-        // 서버의 save API에서 currentPayload.finalTestItems를 보존하도록 처리됨
         ...((module.type === "TYPE_A" || module.type === "TYPE_B") && { quizAnswers }),
       }
 
@@ -279,8 +185,8 @@ export function LearningContent({
   }
 
   const handleComplete = async () => {
-    // 테스트/최종테스트 단계에서만 완료 처리
-    if (phase !== "test" && phase !== "finaltest") {
+    // 테스트 단계에서만 완료 처리
+    if (phase !== "test") {
       toast({
         title: "알림",
         description: "테스트 단계에서만 완료할 수 있습니다.",
@@ -303,41 +209,14 @@ export function LearningContent({
 
     setIsLoading(true)
     try {
-      // 최종테스트인 경우 quizAnswers를 item.id 기반으로 변환
-      let answersToSend = quizAnswers
-      if (phase === "finaltest" && finalTestItems.length > 0) {
-        // 인덱스 기반 quizAnswers를 item.id 기반으로 변환
-        const convertedAnswers: Record<string | number, number> = {}
-        finalTestItems.forEach((item, idx) => {
-          const itemId = item.id || idx
-          // 기존 quizAnswers에서 인덱스로 찾아서 item.id로 변환
-          if (quizAnswers[idx] !== undefined) {
-            convertedAnswers[itemId] = quizAnswers[idx]
-          } else if (quizAnswers[String(idx)] !== undefined) {
-            convertedAnswers[itemId] = quizAnswers[String(idx)]
-          } else if (quizAnswers[itemId] !== undefined) {
-            // 이미 item.id로 되어 있으면 그대로 사용
-            convertedAnswers[itemId] = quizAnswers[itemId]
-          }
-        })
-        answersToSend = convertedAnswers
-        console.log("Converted quizAnswers for finaltest:", {
-          original: quizAnswers,
-          converted: answersToSend,
-          finalTestItems: finalTestItems.map((item, idx) => ({ idx, id: item.id })),
-        })
-      }
-      
       console.log("Calling complete API", { 
         sessionId: currentSessionId, 
         assignmentId, 
         moduleId: module.id,
         phase,
-        quizAnswers: answersToSend,
-        quizAnswersKeys: Object.keys(answersToSend),
+        quizAnswers,
+        quizAnswersKeys: Object.keys(quizAnswers),
         currentIndex,
-        isFinalTest: phase === "finaltest",
-        finalTestItemsCount: finalTestItems.length,
       })
       
       // quizAnswers와 phase를 함께 전달
@@ -349,9 +228,9 @@ export function LearningContent({
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            quizAnswers: answersToSend,
+            quizAnswers,
             currentIndex,
-            phase, // phase 명시적으로 전달
+            phase,
             isReview: isReviewMode,
           }),
         }
@@ -386,17 +265,10 @@ export function LearningContent({
       if (!isReviewMode) {
         const score = data.score !== null && data.score !== undefined ? data.score : 0
         setCompletedScore(score)
-        // 서버에서 계산된 정확한 답안 사용 (클라이언트의 quizAnswers를 그대로 사용)
-        // 최종테스트인 경우 변환된 answersToSend 사용, 아니면 원본 quizAnswers 사용
-        const answersForDisplay = phase === "finaltest" && finalTestItems.length > 0
-          ? (answersToSend || quizAnswers)
-          : quizAnswers
-        setCompletedAnswers(answersForDisplay)
+        setCompletedAnswers(quizAnswers)
         console.log("Setting completed answers:", {
           phase,
-          answersForDisplay,
-          originalQuizAnswers: quizAnswers,
-          answersToSend,
+          quizAnswers,
           score,
         })
         setShowResultDialog(true)
@@ -574,12 +446,8 @@ export function LearningContent({
     return item.payloadJson[`choice${correctIndex + 1}`] || ""
   }
 
-  // 최종테스트인 경우 finalTestItems 사용, 아니면 module.items 사용
-  const displayItems = phase === "finaltest" && finalTestItems.length > 0 
-    ? finalTestItems 
-    : module.items
-  const currentItem = displayItems[currentIndex]
-  const isLast = currentIndex === displayItems.length - 1
+  const currentItem = module.items[currentIndex]
+  const isLast = currentIndex === module.items.length - 1
 
   // payloadJson이 없거나 구조가 잘못된 경우 처리
   if (!currentItem || !currentItem.payloadJson) {
@@ -622,8 +490,8 @@ export function LearningContent({
     }
   })()
 
-  // 테스트/최종테스트만 완료 체크 (단어목록/암기학습은 제외)
-  if ((phase === "test" || phase === "finaltest") && isPhaseCompleted && !isReviewMode && !sessionId) {
+  // 테스트만 완료 체크 (단어목록/암기학습은 제외)
+  if (phase === "test" && isPhaseCompleted && !isReviewMode && !sessionId) {
     return (
       <div className="container mx-auto p-4">
         <Card>
@@ -677,66 +545,10 @@ export function LearningContent({
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            {(phase === "finaltest" && finalTestItems.length > 0 ? finalTestItems : module.items).map((item, idx) => {
-              // correct_index는 0-based 인덱스 (0, 1, 2, 3)
-              // 정답 선택지의 인덱스 (0=첫번째 선택지, 1=두번째 선택지, ...)
-              const correctIndex = Number(item.payloadJson?.correct_index ?? -1)
-              
-              // 답안 찾기: 인덱스를 먼저 시도, 없으면 item.id로 시도
-              // 클라이언트가 인덱스를 키로 보낼 수도 있고, item.id를 키로 보낼 수도 있음
-              let studentAnswer: number | undefined = undefined
-              
-              // 1. 인덱스로 먼저 시도 (일반 테스트는 인덱스 사용)
-              // completedAnswers[문항인덱스] = 선택한 선택지의 인덱스 (0, 1, 2, 3)
-              if (completedAnswers[idx] !== undefined) {
-                studentAnswer = Number(completedAnswers[idx])
-              } else if (completedAnswers[String(idx)] !== undefined) {
-                studentAnswer = Number(completedAnswers[String(idx)])
-              }
-              
-              // 2. 인덱스로 찾지 못했으면 item.id로 시도 (최종테스트인 경우)
-              if (studentAnswer === undefined && phase === "finaltest" && finalTestItems.length > 0 && item.id) {
-                if (completedAnswers[item.id] !== undefined) {
-                  studentAnswer = Number(completedAnswers[item.id])
-                } else if (completedAnswers[String(item.id)] !== undefined) {
-                  studentAnswer = Number(completedAnswers[String(item.id)])
-                }
-              }
-              
-              // 정답 비교: studentAnswer(선택한 선택지 인덱스)와 correctIndex(정답 선택지 인덱스)가 일치하는지 확인
-              // 둘 다 숫자로 변환하여 정확히 비교
-              // studentAnswer는 사용자가 선택한 선택지의 인덱스 (0, 1, 2, 3)
-              // correctIndex는 정답 선택지의 인덱스 (0, 1, 2, 3)
-              const isCorrectAnswer = studentAnswer !== undefined && 
-                                     studentAnswer !== null && 
-                                     !isNaN(studentAnswer) &&
-                                     !isNaN(correctIndex) &&
-                                     correctIndex >= 0 &&
-                                     correctIndex <= 3 &&
-                                     studentAnswer >= 0 &&
-                                     studentAnswer <= 3 &&
-                                     studentAnswer === correctIndex
-              
-              console.log("Result check:", {
-                phase,
-                idx,
-                itemId: item.id,
-                wordText: item.payloadJson?.word_text,
-                studentAnswer,
-                correctIndex,
-                isCorrectAnswer,
-                comparison: `${studentAnswer} === ${correctIndex}`,
-                triedKeys: [idx, String(idx), item.id, String(item.id)],
-                completedAnswersKeys: Object.keys(completedAnswers),
-                completedAnswers: completedAnswers,
-                itemPayload: item.payloadJson,
-                choices: [
-                  item.payloadJson?.choice1,
-                  item.payloadJson?.choice2,
-                  item.payloadJson?.choice3,
-                  item.payloadJson?.choice4,
-                ],
-              })
+            {module.items.map((item, idx) => {
+              const correctIndex = getCorrectAnswer(item)
+              const studentAnswer = completedAnswers[idx]
+              const isCorrectAnswer = studentAnswer === correctIndex
               const choices = [
                 item.payloadJson?.choice1,
                 item.payloadJson?.choice2,
@@ -816,7 +628,6 @@ export function LearningContent({
           {phase === "wordlist" && <span className="ml-2 text-sm text-muted-foreground">(단어목록)</span>}
           {phase === "memorization" && <span className="ml-2 text-sm text-muted-foreground">(암기학습)</span>}
           {phase === "test" && <span className="ml-2 text-sm text-muted-foreground">(테스트)</span>}
-          {phase === "finaltest" && <span className="ml-2 text-sm text-muted-foreground">(최종테스트)</span>}
         </h1>
       </div>
 
@@ -882,7 +693,7 @@ export function LearningContent({
                 )}
               </div>
             </div>
-          ) : phase === "test" || phase === "finaltest" ? (
+          ) : phase === "test" ? (
             // 테스트 단계: 퀴즈 모드
             module.type === "TYPE_A" ? (
               <div className="space-y-4">
@@ -897,11 +708,7 @@ export function LearningContent({
                       currentItem.payloadJson.choice3,
                       currentItem.payloadJson.choice4,
                     ].filter(Boolean).map((choice: string, idx: number) => {
-                      // 최종테스트는 item.id를 키로, 일반 테스트는 인덱스를 키로 사용
-                      // item.id가 없으면 인덱스를 fallback으로 사용
-                      const answerKey = phase === "finaltest" && finalTestItems.length > 0 
-                        ? (currentItem.id || currentIndex)
-                        : currentIndex
+                      const answerKey = currentIndex
                       return (
                         <Button
                           key={idx}
@@ -945,19 +752,7 @@ export function LearningContent({
                       currentItem.payloadJson.choice3,
                       currentItem.payloadJson.choice4,
                     ].filter(Boolean).map((choice: string, idx: number) => {
-                      // 최종테스트는 반드시 item.id를 키로 사용 (없으면 에러)
-                      // 일반 테스트는 인덱스를 키로 사용
-                      let answerKey: string | number
-                      if (phase === "finaltest" && finalTestItems.length > 0) {
-                        if (!currentItem.id) {
-                          console.error("Final test item missing id:", currentItem)
-                          answerKey = currentIndex // fallback
-                        } else {
-                          answerKey = currentItem.id
-                        }
-                      } else {
-                        answerKey = currentIndex
-                      }
+                      const answerKey = currentIndex
                       return (
                         <Button
                           key={idx}
@@ -1011,10 +806,10 @@ export function LearningContent({
               이전
             </Button>
             <span className="text-sm text-muted-foreground">
-              {currentIndex + 1} / {displayItems.length}
+              {currentIndex + 1} / {module.items.length}
             </span>
             {isLast ? (
-              phase === "test" || phase === "finaltest" ? (
+              phase === "test" ? (
                 <Button 
                   onClick={() => {
                     console.log("Complete button clicked", { sessionId, inProgressSession, currentIndex, moduleItemsLength: module.items.length })

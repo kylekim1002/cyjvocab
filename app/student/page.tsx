@@ -141,7 +141,6 @@ export default async function StudentHomePage() {
     wordListProgress: number // 단어목록 진행률
     memorizationProgress: number // 암기학습 진행률
     testScore: number | null // 테스트 최고점
-    finalTestScore: number | null // 최종테스트 최고점
   }> = {}
 
   if (allAssignmentIds.length > 0 && moduleIds.length > 0) {
@@ -194,46 +193,12 @@ export default async function StudentHomePage() {
         // 암기학습 진행률: 현재 assignment의 progress만 사용
         const memorizationProgress = moduleProgress?.memorizeProgressPct || 0
         
-        // 테스트 최고점: 현재 assignment의 세션 중 최고점 (일반 테스트만)
-        const testSessions = moduleSessions.filter(
-          s => {
-            if (s.status !== "COMPLETED" || s.score === null || s.score === undefined) return false
-            // 세션의 payloadJson에서 phase 확인
-            try {
-              if (!s.payloadJson) {
-                return true // payloadJson이 없으면 기본적으로 test로 간주
-              }
-              const payload = s.payloadJson as any
-              const phase = payload?.phase || "test"
-              return phase === "test"
-            } catch {
-              return true // payloadJson 파싱 실패 시 기본적으로 test로 간주
-            }
-          }
+        // 테스트 최고점: 현재 assignment의 세션 중 최고점
+        const completedSessions = moduleSessions.filter(
+          s => s.status === "COMPLETED" && s.score !== null && s.score !== undefined
         )
-        const testScore = testSessions.length > 0
-          ? Math.max(...testSessions.map(s => s.score!))
-          : null
-
-        // 최종테스트 최고점: 현재 assignment의 세션 중 최고점 (최종테스트만)
-        const finalTestSessions = moduleSessions.filter(
-          s => {
-            if (s.status !== "COMPLETED" || s.score === null || s.score === undefined) return false
-            // 세션의 payloadJson에서 phase 확인
-            try {
-              if (!s.payloadJson) {
-                return false // payloadJson이 없으면 finaltest로 간주하지 않음
-              }
-              const payload = s.payloadJson as any
-              const phase = payload?.phase || "test"
-              return phase === "finaltest"
-            } catch {
-              return false // payloadJson 파싱 실패 시 finaltest로 간주하지 않음
-            }
-          }
-        )
-        const finalTestScore = finalTestSessions.length > 0
-          ? Math.max(...finalTestSessions.map(s => s.score!))
+        const testScore = completedSessions.length > 0
+          ? Math.max(...completedSessions.map(s => s.score!))
           : null
 
         // assignmentId + moduleId 조합으로 저장 (동일 학습 재제출 시 구분)
@@ -241,7 +206,6 @@ export default async function StudentHomePage() {
           wordListProgress,
           memorizationProgress,
           testScore,
-          finalTestScore,
         }
       }
     }
