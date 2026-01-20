@@ -675,34 +675,38 @@ export function LearningContent({
           </DialogHeader>
           <div className="space-y-4">
             {(phase === "finaltest" && finalTestItems.length > 0 ? finalTestItems : module.items).map((item, idx) => {
-              const correctIndex = getCorrectAnswer(item)
+              // correct_index는 0-based 인덱스 (0, 1, 2, 3)
+              const correctIndex = Number(item.payloadJson?.correct_index ?? -1)
               
               // 답안 찾기: 인덱스를 먼저 시도, 없으면 item.id로 시도
               // 클라이언트가 인덱스를 키로 보낼 수도 있고, item.id를 키로 보낼 수도 있음
               let studentAnswer: number | undefined = undefined
               
-              // 1. 인덱스로 먼저 시도 (일반적으로 클라이언트가 인덱스를 키로 사용)
-              // 문자열과 숫자 키 모두 시도
+              // 1. 인덱스로 먼저 시도 (일반 테스트는 인덱스 사용)
               if (completedAnswers[idx] !== undefined) {
-                studentAnswer = completedAnswers[idx]
+                studentAnswer = Number(completedAnswers[idx])
               } else if (completedAnswers[String(idx)] !== undefined) {
-                studentAnswer = completedAnswers[String(idx)]
+                studentAnswer = Number(completedAnswers[String(idx)])
               }
               
               // 2. 인덱스로 찾지 못했으면 item.id로 시도 (최종테스트인 경우)
               if (studentAnswer === undefined && phase === "finaltest" && finalTestItems.length > 0 && item.id) {
                 if (completedAnswers[item.id] !== undefined) {
-                  studentAnswer = completedAnswers[item.id]
+                  studentAnswer = Number(completedAnswers[item.id])
                 } else if (completedAnswers[String(item.id)] !== undefined) {
-                  studentAnswer = completedAnswers[String(item.id)]
+                  studentAnswer = Number(completedAnswers[String(item.id)])
                 }
               }
               
               // 정답 비교: studentAnswer와 correctIndex가 일치하는지 확인
+              // 둘 다 숫자로 변환하여 정확히 비교
               const isCorrectAnswer = studentAnswer !== undefined && 
                                      studentAnswer !== null && 
-                                     !isNaN(Number(studentAnswer)) &&
-                                     Number(studentAnswer) === Number(correctIndex)
+                                     !isNaN(studentAnswer) &&
+                                     !isNaN(correctIndex) &&
+                                     correctIndex >= 0 &&
+                                     correctIndex <= 3 &&
+                                     studentAnswer === correctIndex
               
               console.log("Result check:", {
                 phase,
@@ -711,9 +715,11 @@ export function LearningContent({
                 studentAnswer,
                 correctIndex,
                 isCorrectAnswer,
-                triedKeys: [idx, String(idx), Number(idx), item.id, String(item.id)],
+                comparison: `${studentAnswer} === ${correctIndex}`,
+                triedKeys: [idx, String(idx), item.id, String(item.id)],
                 completedAnswersKeys: Object.keys(completedAnswers),
                 completedAnswers: completedAnswers,
+                itemPayload: item.payloadJson,
               })
               const choices = [
                 item.payloadJson?.choice1,
