@@ -85,20 +85,39 @@ export function LearningContent({
     
     // 테스트 단계에서만 세션 체크
     if (phase === "test") {
-      // 진행 중인 세션이 있으면 삭제하고 새로 시작 (완료된 학습도 포함)
-      if (inProgressSession) {
+      // 진행 중인 세션이 있으면 답안 복원
+      if (inProgressSession && !sessionId) {
         const sessionPayload = inProgressSession.payloadJson as any
         const sessionPhase = sessionPayload?.phase || "test"
-        // 다른 phase의 세션이면 삭제하고 새 세션 시작
-        if (sessionPhase !== phase) {
+        // 같은 phase의 세션이면 답안 복원
+        if (sessionPhase === phase) {
+          setSessionId(inProgressSession.id)
+          const savedAnswers = sessionPayload?.quizAnswers || {}
+          // 답안 정규화 (키를 숫자로 변환)
+          const normalizedAnswers: Record<number, number> = {}
+          Object.keys(savedAnswers).forEach((key) => {
+            const numKey = Number(key)
+            if (!isNaN(numKey)) {
+              const numValue = Number(savedAnswers[key])
+              if (!isNaN(numValue)) {
+                normalizedAnswers[numKey] = numValue
+              }
+            }
+          })
+          setQuizAnswers(normalizedAnswers)
+          setCurrentIndex(sessionPayload?.currentIndex || 0)
+          console.log("Restored session answers:", {
+            sessionId: inProgressSession.id,
+            savedAnswers,
+            normalizedAnswers,
+            currentIndex: sessionPayload?.currentIndex,
+          })
+          return
+        } else {
+          // 다른 phase의 세션이면 삭제하고 새 세션 시작
           fetch(`/api/student/sessions/${inProgressSession.id}`, {
             method: "DELETE",
           }).catch(console.error)
-          // 다른 phase의 세션이므로 새 세션 시작
-          if (!sessionId) {
-            startNewSession()
-          }
-          return
         }
       }
       // 완료된 학습도 다시 시작할 수 있도록 항상 새 세션으로 시작
@@ -115,7 +134,7 @@ export function LearningContent({
           setShowResultDialog(true)
         }
       }
-      // 항상 새 세션 시작 (완료된 학습도 다시 시작 가능)
+      // 세션이 없으면 새 세션 시작
       if (!sessionId) {
         startNewSession()
       }
@@ -322,6 +341,34 @@ export function LearningContent({
   const handleNext = async () => {
     if (currentIndex < module.items.length - 1) {
       const newIndex = currentIndex + 1
+      
+      // 테스트 단계에서는 답안 자동 저장
+      if (phase === "test" && sessionId && (module.type === "TYPE_A" || module.type === "TYPE_B")) {
+        try {
+          const normalizedQuizAnswers: Record<number, number> = {}
+          Object.keys(quizAnswers).forEach((key) => {
+            const numKey = Number(key)
+            if (!isNaN(numKey)) {
+              normalizedQuizAnswers[numKey] = Number(quizAnswers[key])
+            }
+          })
+          
+          await fetch(`/api/student/sessions/${sessionId}/save`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              payloadJson: {
+                currentIndex: newIndex,
+                phase,
+                quizAnswers: normalizedQuizAnswers,
+              },
+            }),
+          })
+        } catch (error) {
+          console.error("Auto-save error:", error)
+        }
+      }
+      
       setCurrentIndex(newIndex)
       setShowMeaning(false) // 암기학습 토글 리셋
       
@@ -332,9 +379,38 @@ export function LearningContent({
     }
   }
 
-  const handlePrev = () => {
+  const handlePrev = async () => {
     if (currentIndex > 0) {
-      setCurrentIndex(currentIndex - 1)
+      const newIndex = currentIndex - 1
+      
+      // 테스트 단계에서는 답안 자동 저장
+      if (phase === "test" && sessionId && (module.type === "TYPE_A" || module.type === "TYPE_B")) {
+        try {
+          const normalizedQuizAnswers: Record<number, number> = {}
+          Object.keys(quizAnswers).forEach((key) => {
+            const numKey = Number(key)
+            if (!isNaN(numKey)) {
+              normalizedQuizAnswers[numKey] = Number(quizAnswers[key])
+            }
+          })
+          
+          await fetch(`/api/student/sessions/${sessionId}/save`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              payloadJson: {
+                currentIndex: newIndex,
+                phase,
+                quizAnswers: normalizedQuizAnswers,
+              },
+            }),
+          })
+        } catch (error) {
+          console.error("Auto-save error:", error)
+        }
+      }
+      
+      setCurrentIndex(newIndex)
       setShowMeaning(false) // 암기학습 토글 리셋
     }
   }
@@ -760,11 +836,15 @@ export function LearningContent({
                       currentItem.payloadJson.choice4,
                     ].filter(Boolean).map((choice: string, idx: number) => {
                       const answerKey = currentIndex
+                      const numKey = Number(answerKey)
+                      // 저장할 때와 동일하게 숫자 키로 비교
+                      const storedAnswer = quizAnswers[numKey]
+                      const isSelected = storedAnswer !== undefined && Number(storedAnswer) === idx
                       return (
                         <Button
                           key={idx}
                           variant={
-                            quizAnswers[answerKey] === idx
+                            isSelected
                               ? "default"
                               : "outline"
                           }
@@ -772,15 +852,17 @@ export function LearningContent({
                           onClick={() => {
                             // 키를 명시적으로 숫자로 변환하여 저장
                             const newAnswers = { ...quizAnswers }
-                            const numKey = Number(answerKey)
                             newAnswers[numKey] = Number(idx)
                             console.log("Setting quiz answer:", {
                               answerKey,
                               numKey,
+                              currentIndex,
                               selectedChoiceIndex: idx,
                               correctIndex: currentItem.payloadJson?.correct_index,
                               wordText: currentItem.payloadJson?.word_text,
-                              newAnswers,
+                              beforeAnswer: storedAnswer,
+                              afterAnswer: newAnswers[numKey],
+                              allAnswers: newAnswers,
                             })
                             setQuizAnswers(newAnswers)
                           }}
@@ -816,11 +898,15 @@ export function LearningContent({
                       currentItem.payloadJson.choice4,
                     ].filter(Boolean).map((choice: string, idx: number) => {
                       const answerKey = currentIndex
+                      const numKey = Number(answerKey)
+                      // 저장할 때와 동일하게 숫자 키로 비교
+                      const storedAnswer = quizAnswers[numKey]
+                      const isSelected = storedAnswer !== undefined && Number(storedAnswer) === idx
                       return (
                         <Button
                           key={idx}
                           variant={
-                            quizAnswers[answerKey] === idx
+                            isSelected
                               ? "default"
                               : "outline"
                           }
@@ -828,18 +914,19 @@ export function LearningContent({
                           onClick={() => {
                             // 키를 명시적으로 숫자로 변환하여 저장
                             const newAnswers = { ...quizAnswers }
-                            const numKey = Number(answerKey)
                             newAnswers[numKey] = Number(idx)
                             console.log("Setting quiz answer:", { 
                               answerKey,
                               numKey,
+                              currentIndex,
                               selectedChoiceIndex: idx, 
                               phase, 
                               itemId: currentItem.id, 
-                              currentIndex,
                               wordText: currentItem.payloadJson?.word_text,
                               correctIndex: currentItem.payloadJson?.correct_index,
-                              newAnswers,
+                              beforeAnswer: storedAnswer,
+                              afterAnswer: newAnswers[numKey],
+                              allAnswers: newAnswers,
                             })
                             setQuizAnswers(newAnswers)
                           }}
