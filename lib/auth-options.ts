@@ -7,10 +7,12 @@ import { UserRole, StudentStatus } from "@prisma/client"
 // Prisma 연결 확인
 async function ensurePrismaConnection() {
   try {
-    await prisma.$connect()
+    // 간단한 쿼리로 연결 확인
+    await prisma.$queryRaw`SELECT 1`
   } catch (error) {
     console.error("Prisma connection failed in auth-options:", error)
-    throw new Error("Database connection failed")
+    // 연결 실패해도 에러를 throw하지 않고 로그만 남김
+    // 인증은 계속 진행하되, DB 쿼리는 실패할 수 있음
   }
 }
 
@@ -25,23 +27,27 @@ export const authOptions: NextAuthOptions = {
       },
       async authorize(credentials, req) {
         try {
-          // Prisma 연결 확인
+          // Prisma 연결 확인 (에러가 나도 계속 진행)
           await ensurePrismaConnection()
 
           // 자동로그인 처리 (password가 특별한 값인 경우)
           if (credentials?.password === "auto-login-token" && credentials?.username) {
-            // username이 실제로는 토큰인 경우
-            const user = await verifyAutoLoginToken(credentials.username)
-            if (user) {
-              return {
-                id: user.id,
-                username: user.username,
-                role: user.role,
-                campusId: user.campusId,
-                studentId: user.studentId,
-                studentStatus: user.studentStatus,
-                hasActiveClass: user.hasActiveClass,
+            try {
+              // username이 실제로는 토큰인 경우
+              const user = await verifyAutoLoginToken(credentials.username)
+              if (user) {
+                return {
+                  id: user.id,
+                  username: user.username,
+                  role: user.role,
+                  campusId: user.campusId,
+                  studentId: user.studentId,
+                  studentStatus: user.studentStatus,
+                  hasActiveClass: user.hasActiveClass,
+                }
               }
+            } catch (error) {
+              console.error("Auto login error:", error)
             }
             return null
           }
@@ -52,9 +58,18 @@ export const authOptions: NextAuthOptions = {
           }
 
           // 레이트 리밋 확인
-          const canProceed = await checkRateLimit(credentials.username)
-          if (!canProceed) {
-            throw new Error("로그인 시도가 너무 많습니다. 3분 후 다시 시도해주세요.")
+          try {
+            const canProceed = await checkRateLimit(credentials.username)
+            if (!canProceed) {
+              throw new Error("로그인 시도가 너무 많습니다. 3분 후 다시 시도해주세요.")
+            }
+          } catch (error: any) {
+            // 레이트 리밋 에러는 그대로 throw
+            if (error.message?.includes("로그인 시도가 너무 많습니다")) {
+              throw error
+            }
+            console.error("Rate limit check error:", error)
+            // 다른 에러는 무시하고 계속 진행
           }
 
           const ipAddress = req?.headers?.["x-forwarded-for"] || 
@@ -80,8 +95,12 @@ export const authOptions: NextAuthOptions = {
             studentStatus: user.studentStatus,
             hasActiveClass: user.hasActiveClass,
           }
-        } catch (error) {
+        } catch (error: any) {
           console.error("Auth authorize error:", error)
+          // 레이트 리밋 에러는 그대로 throw
+          if (error.message?.includes("로그인 시도가 너무 많습니다")) {
+            throw error
+          }
           return null
         }
       },

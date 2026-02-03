@@ -80,7 +80,8 @@ export async function verifyCredentials(
   } catch (error: any) {
     // 데이터베이스 연결 실패 시 에러 로깅
     console.error('Database connection error in verifyCredentials:', error)
-    throw new Error('데이터베이스 연결에 실패했습니다. 관리자에게 문의하세요.')
+    // 에러를 throw하지 않고 null 반환 (로그인 실패로 처리)
+    return null
   }
 }
 
