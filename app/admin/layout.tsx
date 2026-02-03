@@ -8,22 +8,28 @@ export default async function AdminLayout({
 }: {
   children: React.ReactNode
 }) {
-  const session = await getServerSession(authOptions)
+  try {
+    const session = await getServerSession(authOptions)
 
-  if (!session) {
+    if (!session) {
+      redirect("/login")
+    }
+
+    if (session.user.role !== "SUPER_ADMIN" && session.user.role !== "MANAGER") {
+      redirect("/student")
+    }
+
+    return (
+      <div className="flex h-screen bg-gray-50">
+        <AdminSidebar role={session.user.role} />
+        <main className="flex-1 overflow-y-auto overflow-x-hidden">
+          <div className="container mx-auto p-6 max-w-7xl">{children}</div>
+        </main>
+      </div>
+    )
+  } catch (error) {
+    console.error("Admin layout error:", error)
+    // 에러 발생 시 로그인 페이지로 리다이렉트
     redirect("/login")
   }
-
-  if (session.user.role !== "SUPER_ADMIN" && session.user.role !== "MANAGER") {
-    redirect("/student")
-  }
-
-  return (
-    <div className="flex h-screen bg-gray-50">
-      <AdminSidebar role={session.user.role} />
-      <main className="flex-1 overflow-y-auto overflow-x-hidden">
-        <div className="container mx-auto p-6 max-w-7xl">{children}</div>
-      </main>
-    </div>
-  )
 }

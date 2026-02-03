@@ -17,3 +17,14 @@ export const prisma =
 if (process.env.NODE_ENV !== 'production') {
   globalForPrisma.prisma = prisma
 }
+
+// Prisma 연결 확인 함수
+export async function checkPrismaConnection(): Promise<boolean> {
+  try {
+    await prisma.$connect()
+    return true
+  } catch (error) {
+    console.error('Prisma connection error:', error)
+    return false
+  }
+}
