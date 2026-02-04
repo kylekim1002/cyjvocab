@@ -549,15 +549,19 @@ export function LearningContent({
   }
 
   // 항상 order로 정렬된 배열 사용 (서버와 동일한 순서 보장)
-  const sortedItems = [...module.items].sort((a, b) => a.order - b.order)
+  // module.items가 없거나 undefined인 경우 빈 배열로 처리
+  const sortedItems = (module.items && Array.isArray(module.items) && module.items.length > 0)
+    ? [...module.items].sort((a, b) => a.order - b.order)
+    : []
 
-  // 배열이 비어있는 경우 처리
+  // 배열이 비어있는 경우 처리 (하지만 서버에서 리다이렉트하지 않고 클라이언트에서 처리)
   if (sortedItems.length === 0) {
     return (
       <div className="container mx-auto p-4">
         <Card>
           <CardContent className="py-8 text-center">
             <h2 className="text-2xl font-bold mb-4">학습 항목이 없습니다.</h2>
+            <p className="text-muted-foreground mb-4">이 학습 모듈에는 아직 항목이 등록되지 않았습니다.</p>
             <Button onClick={() => router.push("/student")}>홈으로</Button>
           </CardContent>
         </Card>

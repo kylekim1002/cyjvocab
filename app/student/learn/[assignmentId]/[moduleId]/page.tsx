@@ -84,11 +84,8 @@ export default async function LearningPage({
       redirect("/student")
     }
 
-    // items가 비어있는 경우도 체크
-    if (!module.items || module.items.length === 0) {
-      console.error("Module has no items:", params.moduleId)
-      redirect("/student")
-    }
+    // items가 비어있는 경우는 클라이언트에서 처리하도록 함
+    // (빈 모듈도 표시할 수 있어야 함)
   } catch (error) {
     console.error("Error fetching module:", error)
     redirect("/student")
