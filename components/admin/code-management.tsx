@@ -126,13 +126,30 @@ export function CodeManagement({ initialCodes }: CodeManagementProps) {
       })
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: "추가 실패" }))
+        let errorData
+        try {
+          errorData = await response.json()
+        } catch (parseError) {
+          const text = await response.text()
+          console.error("Failed to parse error response:", {
+            status: response.status,
+            statusText: response.statusText,
+            text,
+          })
+          throw new Error(`서버 오류 (${response.status}): ${response.statusText}`)
+        }
+        
         console.error("Code creation failed:", {
           status: response.status,
           statusText: response.statusText,
           error: errorData,
+          url: response.url,
         })
-        throw new Error(errorData.error || errorData.details || "추가 실패")
+        
+        const errorMessage = errorData.details 
+          ? `${errorData.error}: ${errorData.details}`
+          : errorData.error || "추가 실패"
+        throw new Error(errorMessage)
       }
 
       const newCode = await response.json()
