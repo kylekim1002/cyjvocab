@@ -545,6 +545,13 @@ export function LearningContent({
     return item.payloadJson[`choice${correctIndex + 1}`] || ""
   }
 
+  // 항상 order로 정렬된 배열 사용 (서버와 동일한 순서 보장)
+  const sortedItems = [...module.items].sort((a, b) => a.order - b.order)
+
+  // 정렬된 배열을 기반으로 currentItem과 isLast 계산
+  const currentItem = sortedItems[currentIndex]
+  const isLast = currentIndex === sortedItems.length - 1
+
   // payloadJson이 없거나 구조가 잘못된 경우 처리
   if (!currentItem || !currentItem.payloadJson) {
     return (
@@ -618,13 +625,6 @@ export function LearningContent({
     const studentAnswer = Number(completedAnswers[itemIndex] ?? -1) // 숫자로 변환
     return studentAnswer === correctIndex
   }
-
-  // 항상 order로 정렬된 배열 사용 (서버와 동일한 순서 보장)
-  const sortedItems = [...module.items].sort((a, b) => a.order - b.order)
-
-  // 정렬된 배열을 기반으로 currentItem과 isLast 계산
-  const currentItem = sortedItems[currentIndex]
-  const isLast = currentIndex === sortedItems.length - 1
 
   return (
     <div className="container mx-auto p-4 space-y-4">
