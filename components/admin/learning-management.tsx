@@ -90,11 +90,9 @@ export function LearningManagement({
     }
   }
 
-  // 컴포넌트 마운트 시 데이터가 없으면 서버에서 가져오기
+  // 컴포넌트 마운트 시 항상 서버에서 최신 데이터 가져오기
   useEffect(() => {
-    if (!initialModules || initialModules.length === 0) {
-      refreshModules()
-    }
+    refreshModules()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 

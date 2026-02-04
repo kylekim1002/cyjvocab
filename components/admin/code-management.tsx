@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -25,7 +25,13 @@ interface CodeManagementProps {
 
 export function CodeManagement({ initialCodes }: CodeManagementProps) {
   const { toast } = useToast()
-  const [codes, setCodes] = useState(initialCodes)
+  const [codes, setCodes] = useState(initialCodes || [])
+  
+  // 컴포넌트 마운트 시 항상 서버에서 최신 데이터 가져오기
+  useEffect(() => {
+    refreshCodes()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   const [newCategory, setNewCategory] = useState<CodeCategory>("GRADE")
   const [newValue, setNewValue] = useState("")
   const [newOrder, setNewOrder] = useState(0)
@@ -40,13 +46,10 @@ export function CodeManagement({ initialCodes }: CodeManagementProps) {
       const response = await fetch("/api/admin/codes")
       if (response.ok) {
         const latestCodes = await response.json()
-        if (Array.isArray(latestCodes) && latestCodes.length > 0) {
+        if (Array.isArray(latestCodes)) {
           setCodes(latestCodes)
-        } else if (Array.isArray(latestCodes)) {
-          // 빈 배열인 경우에만 업데이트 (실제로 데이터가 없는 경우)
-        setCodes(latestCodes)
+          console.log("Refreshed codes:", latestCodes.length)
         }
-        // 응답이 실패하거나 유효하지 않으면 기존 상태 유지
       } else {
         console.error("Failed to refresh codes: HTTP", response.status)
         // 실패해도 기존 상태 유지

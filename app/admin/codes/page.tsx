@@ -15,13 +15,15 @@ export default async function CodesPage() {
     let codes: Code[] = []
     try {
       codes = await prisma.code.findMany({
-    orderBy: [
-      { category: "asc" },
-      { order: "asc" },
-    ],
-  })
+        orderBy: [
+          { category: "asc" },
+          { order: "asc" },
+        ],
+      })
+      console.log("Fetched codes:", codes.length)
     } catch (error) {
       console.error("Error fetching codes:", error)
+      // 에러가 발생해도 빈 배열로 계속 진행 (컴포넌트에서 처리)
     }
 
   return (

@@ -82,16 +82,18 @@ export function StudentManagement({
     }
   }
   
-  // initialStudents가 변경되면 students state 업데이트
+  // 컴포넌트 마운트 시 항상 서버에서 최신 데이터 가져오기
+  useEffect(() => {
+    refreshStudents()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  
+  // initialStudents가 변경되면 students state 업데이트 (서버 사이드 데이터가 있으면 사용)
   useEffect(() => {
     if (initialStudents && initialStudents.length > 0) {
       setStudents(initialStudents)
       setFilteredStudents(initialStudents)
-    } else {
-      // 데이터가 없으면 서버에서 가져오기
-      refreshStudents()
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialStudents])
   
   const [formData, setFormData] = useState({
