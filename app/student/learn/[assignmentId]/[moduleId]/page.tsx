@@ -69,16 +69,28 @@ export default async function LearningPage({
   }
 
   // 학습 모듈 조회
-  const module = await prisma.learningModule.findUnique({
-    where: { id: params.moduleId },
-    include: {
-      items: {
-        orderBy: { order: "asc" },
+  let module
+  try {
+    module = await prisma.learningModule.findUnique({
+      where: { id: params.moduleId },
+      include: {
+        items: {
+          orderBy: { order: "asc" },
+        },
       },
-    },
-  })
+    })
 
-  if (!module) {
+    if (!module) {
+      redirect("/student")
+    }
+
+    // items가 비어있는 경우도 체크
+    if (!module.items || module.items.length === 0) {
+      console.error("Module has no items:", params.moduleId)
+      redirect("/student")
+    }
+  } catch (error) {
+    console.error("Error fetching module:", error)
     redirect("/student")
   }
 

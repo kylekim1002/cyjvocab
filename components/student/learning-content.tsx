@@ -342,8 +342,9 @@ export function LearningContent({
 
   const handleNext = async () => {
     const sortedItems = [...module.items].sort((a, b) => a.order - b.order)
-    if (currentIndex < sortedItems.length - 1) {
-      const newIndex = currentIndex + 1
+    const safeCurrentIndex = Math.max(0, Math.min(currentIndex, sortedItems.length - 1))
+    if (safeCurrentIndex < sortedItems.length - 1) {
+      const newIndex = safeCurrentIndex + 1
       
       // 테스트 단계에서는 답안 자동 저장
       if (phase === "test" && sessionId && (module.type === "TYPE_A" || module.type === "TYPE_B")) {
@@ -384,8 +385,10 @@ export function LearningContent({
   }
 
   const handlePrev = async () => {
-    if (currentIndex > 0) {
-      const newIndex = currentIndex - 1
+    const sortedItems = [...module.items].sort((a, b) => a.order - b.order)
+    const safeCurrentIndex = Math.max(0, Math.min(currentIndex, sortedItems.length - 1))
+    if (safeCurrentIndex > 0) {
+      const newIndex = safeCurrentIndex - 1
       
       // 테스트 단계에서는 답안 자동 저장
       if (phase === "test" && sessionId && (module.type === "TYPE_A" || module.type === "TYPE_B")) {
@@ -548,9 +551,26 @@ export function LearningContent({
   // 항상 order로 정렬된 배열 사용 (서버와 동일한 순서 보장)
   const sortedItems = [...module.items].sort((a, b) => a.order - b.order)
 
+  // 배열이 비어있는 경우 처리
+  if (sortedItems.length === 0) {
+    return (
+      <div className="container mx-auto p-4">
+        <Card>
+          <CardContent className="py-8 text-center">
+            <h2 className="text-2xl font-bold mb-4">학습 항목이 없습니다.</h2>
+            <Button onClick={() => router.push("/student")}>홈으로</Button>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  // currentIndex가 범위를 벗어나면 0으로 조정
+  const safeCurrentIndex = Math.max(0, Math.min(currentIndex, sortedItems.length - 1))
+  
   // 정렬된 배열을 기반으로 currentItem과 isLast 계산
-  const currentItem = sortedItems[currentIndex]
-  const isLast = currentIndex === sortedItems.length - 1
+  const currentItem = sortedItems[safeCurrentIndex]
+  const isLast = safeCurrentIndex === sortedItems.length - 1
 
   // payloadJson이 없거나 구조가 잘못된 경우 처리
   if (!currentItem || !currentItem.payloadJson) {
@@ -845,7 +865,7 @@ export function LearningContent({
                       currentItem.payloadJson.choice3,
                       currentItem.payloadJson.choice4,
                     ].filter(Boolean).map((choice: string, idx: number) => {
-                      const answerKey = currentIndex
+                      const answerKey = safeCurrentIndex
                       const numKey = Number(answerKey)
                       // 저장할 때와 동일하게 숫자 키로 비교
                       const storedAnswer = quizAnswers[numKey]
@@ -911,7 +931,7 @@ export function LearningContent({
                       currentItem.payloadJson.choice3,
                       currentItem.payloadJson.choice4,
                     ].filter(Boolean).map((choice: string, idx: number) => {
-                      const answerKey = currentIndex
+                      const answerKey = safeCurrentIndex
                       const numKey = Number(answerKey)
                       // 저장할 때와 동일하게 숫자 키로 비교
                       const storedAnswer = quizAnswers[numKey]
@@ -972,13 +992,13 @@ export function LearningContent({
             <Button
               variant="outline"
               onClick={handlePrev}
-              disabled={currentIndex === 0}
+              disabled={safeCurrentIndex === 0}
             >
               <ArrowLeft className="h-4 w-4 mr-2" />
               이전
             </Button>
             <span className="text-sm text-muted-foreground">
-              {currentIndex + 1} / {sortedItems.length}
+              {safeCurrentIndex + 1} / {sortedItems.length}
             </span>
             {isLast ? (
               phase === "test" ? (
