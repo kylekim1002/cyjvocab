@@ -52,7 +52,8 @@ export function LearningContent({
 }: LearningContentProps) {
   const router = useRouter()
   const { toast } = useToast()
-  const [currentIndex, setCurrentIndex] = useState(0)
+  // 테스트 단계에서는 -1로 시작하여 안내 화면 표시, 단어목록/암기학습은 0으로 시작
+  const [currentIndex, setCurrentIndex] = useState(phase === "test" ? -1 : 0)
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [quizAnswers, setQuizAnswers] = useState<Record<string | number, number>>({})
@@ -107,12 +108,14 @@ export function LearningContent({
             }
           })
           setQuizAnswers(normalizedAnswers)
-          setCurrentIndex(sessionPayload?.currentIndex || 0)
+          // 진행 중인 세션이 있으면 안내 화면 건너뛰고 바로 시험 시작
+          const savedIndex = sessionPayload?.currentIndex || 0
+          setCurrentIndex(savedIndex >= 0 ? savedIndex : 0)
           console.log("Restored session answers:", {
             sessionId: inProgressSession.id,
             savedAnswers,
             normalizedAnswers,
-            currentIndex: sessionPayload?.currentIndex,
+            currentIndex: savedIndex,
           })
           return
         } else {
@@ -611,6 +614,34 @@ export function LearningContent({
             <h2 className="text-2xl font-bold mb-4">학습 항목이 없습니다.</h2>
             <p className="text-muted-foreground mb-4">이 학습 모듈에는 아직 항목이 등록되지 않았습니다.</p>
             <Button onClick={() => router.push("/student")}>홈으로</Button>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  // 테스트 단계에서 안내 화면 표시 (currentIndex === -1)
+  if (phase === "test" && currentIndex === -1) {
+    return (
+      <div className="container mx-auto p-4">
+        <Card>
+          <CardContent className="py-8 text-center space-y-6">
+            <h2 className="text-3xl font-bold mb-4">테스트를 시작합니다</h2>
+            <p className="text-lg text-muted-foreground">
+              준비가 되셨으면 아래 버튼을 눌러 테스트를 시작하세요.
+            </p>
+            <div className="flex justify-center mt-8">
+              <Button 
+                onClick={() => {
+                  setCurrentIndex(0)
+                }}
+                size="lg"
+                className="px-8 py-6 text-lg"
+              >
+                다음
+                <ArrowRight className="h-5 w-5 ml-2" />
+              </Button>
+            </div>
           </CardContent>
         </Card>
       </div>
