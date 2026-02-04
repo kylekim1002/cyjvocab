@@ -64,6 +64,7 @@ export function LearningContent({
   const [memorizeMaxIndex, setMemorizeMaxIndex] = useState<number>(-1)
   const [showMeaning, setShowMeaning] = useState<boolean>(false) // 암기학습용 토글
   const [showAnswerRequired, setShowAnswerRequired] = useState<boolean>(false) // 답 선택 필수 경고
+  const [isCompleting, setIsCompleting] = useState<boolean>(false) // 완료 처리 중 플래그 (중복 클릭 방지)
 
   useEffect(() => {
     console.log("LearningContent useEffect", { inProgressSession, progress, sessionId, isReviewMode, completedSession, phase })
@@ -205,6 +206,11 @@ export function LearningContent({
   }
 
   const handleComplete = async () => {
+    // 이미 완료 처리 중이면 무시
+    if (isCompleting) {
+      return
+    }
+
     // 테스트 단계에서만 완료 처리
     if (phase !== "test") {
       toast({
@@ -232,6 +238,10 @@ export function LearningContent({
       }
     }
 
+    // 완료 처리 시작 - 즉시 플래그 설정하여 중복 클릭 방지
+    setIsCompleting(true)
+    setIsLoading(true)
+
     console.log("handleComplete called", { sessionId, assignmentId, moduleId: module.id, inProgressSession })
     
     // sessionId가 없으면 inProgressSession에서 가져오기 시도
@@ -245,7 +255,6 @@ export function LearningContent({
     // sessionId가 없어도 완료 API는 세션을 찾을 수 있으므로 진행
     // API에서 세션을 자동으로 찾아서 처리함
 
-    setIsLoading(true)
     try {
       console.log("Calling complete API", { 
         sessionId: currentSessionId, 
@@ -1063,10 +1072,10 @@ export function LearningContent({
                             console.log("Complete button clicked", { sessionId, inProgressSession, currentIndex, moduleItemsLength: module.items.length })
                             handleComplete()
                           }} 
-                          disabled={isLoading}
+                          disabled={isLoading || isCompleting}
                           className={showRequired ? "bg-red-500 hover:bg-red-600 text-white" : ""}
                         >
-                          {isLoading ? "처리 중..." : "완료"}
+                          {isLoading || isCompleting ? "처리 중..." : "완료"}
                         </Button>
                         {showRequired && (
                           <span className="text-xs text-red-500">답을 선택하세요</span>
