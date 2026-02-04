@@ -70,6 +70,13 @@ export default async function StudentsPage() {
       console.error("Error fetching students data:", error)
     }
 
+    // StudentManagement 컴포넌트가 기대하는 타입으로 변환
+    const transformedStudents = students.map((student) => ({
+      ...student,
+      campus: student.campus || { id: "", name: "" },
+      // grade와 level은 이미 null을 허용하므로 그대로 사용
+    }))
+
     return (
       <div className="space-y-6">
         <div>
@@ -80,7 +87,7 @@ export default async function StudentsPage() {
           campuses={campuses} 
           gradeCodes={gradeCodes}
           levelCodes={levelCodes}
-          initialStudents={students}
+          initialStudents={transformedStudents}
         />
       </div>
     )
