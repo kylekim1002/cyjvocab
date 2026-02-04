@@ -127,7 +127,12 @@ export function CodeManagement({ initialCodes }: CodeManagementProps) {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: "추가 실패" }))
-        throw new Error(errorData.error || "추가 실패")
+        console.error("Code creation failed:", {
+          status: response.status,
+          statusText: response.statusText,
+          error: errorData,
+        })
+        throw new Error(errorData.error || errorData.details || "추가 실패")
       }
 
       const newCode = await response.json()
@@ -140,6 +145,7 @@ export function CodeManagement({ initialCodes }: CodeManagementProps) {
         description: "코드값이 추가되었습니다.",
       })
     } catch (error: any) {
+      console.error("Code creation error:", error)
       const errorMessage = error.message || "코드값 추가에 실패했습니다."
       toast({
         title: "오류",
