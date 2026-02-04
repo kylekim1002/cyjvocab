@@ -128,7 +128,14 @@ export async function POST(
 
       console.log("=== 점수 계산 시작 ===")
       console.log("정규화된 quizAnswers:", normalizedQuizAnswers)
+      console.log("정규화된 quizAnswers 키:", Object.keys(normalizedQuizAnswers).map(k => ({ key: k, type: typeof k, value: normalizedQuizAnswers[Number(k)] })))
       console.log("모듈 items 개수:", sortedItems.length)
+      console.log("정렬된 items 순서:", sortedItems.map((item, idx) => ({ 
+        arrayIndex: idx, 
+        order: item.order, 
+        word: (item.payloadJson as any)?.word_text,
+        correctIndex: (item.payloadJson as any)?.correct_index 
+      })))
 
       sortedItems.forEach((item, arrayIndex) => {
         if (!item.payloadJson) {

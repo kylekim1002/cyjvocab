@@ -6,11 +6,11 @@ import { Campus, Code, Student } from "@prisma/client"
 
 export default async function StudentsPage() {
   try {
-    const session = await getServerSession(authOptions)
+  const session = await getServerSession(authOptions)
 
-    if (!session || (session.user.role !== "SUPER_ADMIN" && session.user.role !== "MANAGER")) {
-      return null
-    }
+  if (!session || (session.user.role !== "SUPER_ADMIN" && session.user.role !== "MANAGER")) {
+    return null
+  }
 
     let campuses: Campus[] = []
     let gradeCodes: Code[] = []
@@ -24,46 +24,46 @@ export default async function StudentsPage() {
     try {
       [campuses, gradeCodes, levelCodes, students] = await Promise.all([
         prisma.campus.findMany({
-          orderBy: { name: "asc" },
+    orderBy: { name: "asc" },
         }),
         prisma.code.findMany({
-          where: { category: "GRADE" },
-          orderBy: { order: "asc" },
+    where: { category: "GRADE" },
+    orderBy: { order: "asc" },
         }),
         prisma.code.findMany({
-          where: { category: "LEVEL" },
-          orderBy: { order: "asc" },
+    where: { category: "LEVEL" },
+    orderBy: { order: "asc" },
         }),
         prisma.student.findMany({
-          select: {
-            id: true,
-            name: true,
-            username: true,
-            plainPassword: true,
-            status: true,
-            school: true,
-            autoLoginToken: true,
-            createdAt: true,
-            campus: {
-              select: {
-                id: true,
-                name: true,
-              },
-            },
-            grade: {
-              select: {
-                id: true,
-                value: true,
-              },
-            },
-            level: {
-              select: {
-                id: true,
-                value: true,
-              },
-            },
-          },
-          orderBy: { createdAt: "desc" },
+    select: {
+      id: true,
+      name: true,
+      username: true,
+      plainPassword: true,
+      status: true,
+      school: true,
+      autoLoginToken: true,
+      createdAt: true,
+      campus: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+      grade: {
+        select: {
+          id: true,
+          value: true,
+        },
+      },
+      level: {
+        select: {
+          id: true,
+          value: true,
+        },
+      },
+    },
+    orderBy: { createdAt: "desc" },
         }),
       ])
     } catch (error) {
@@ -77,20 +77,20 @@ export default async function StudentsPage() {
       // grade와 level은 이미 null을 허용하므로 그대로 사용
     }))
 
-    return (
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold">학생 관리</h1>
-          <p className="text-muted-foreground">학생을 등록하고 관리합니다.</p>
-        </div>
-        <StudentManagement 
-          campuses={campuses} 
-          gradeCodes={gradeCodes}
-          levelCodes={levelCodes}
-          initialStudents={transformedStudents}
-        />
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-3xl font-bold">학생 관리</h1>
+        <p className="text-muted-foreground">학생을 등록하고 관리합니다.</p>
       </div>
-    )
+      <StudentManagement 
+        campuses={campuses} 
+        gradeCodes={gradeCodes}
+        levelCodes={levelCodes}
+          initialStudents={transformedStudents}
+      />
+    </div>
+  )
   } catch (error) {
     console.error("Students page error:", error)
     return (

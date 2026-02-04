@@ -6,33 +6,33 @@ import { Code } from "@prisma/client"
 
 export default async function CodesPage() {
   try {
-    const session = await getServerSession(authOptions)
+  const session = await getServerSession(authOptions)
 
-    if (!session || (session.user.role !== "SUPER_ADMIN" && session.user.role !== "MANAGER")) {
-      return null
-    }
+  if (!session || (session.user.role !== "SUPER_ADMIN" && session.user.role !== "MANAGER")) {
+    return null
+  }
 
     let codes: Code[] = []
     try {
       codes = await prisma.code.findMany({
-        orderBy: [
-          { category: "asc" },
-          { order: "asc" },
-        ],
-      })
+    orderBy: [
+      { category: "asc" },
+      { order: "asc" },
+    ],
+  })
     } catch (error) {
       console.error("Error fetching codes:", error)
     }
 
-    return (
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold">코드값 관리</h1>
-          <p className="text-muted-foreground">학년 및 레벨 코드값을 관리합니다.</p>
-        </div>
-        <CodeManagement initialCodes={codes} />
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-3xl font-bold">코드값 관리</h1>
+        <p className="text-muted-foreground">학년 및 레벨 코드값을 관리합니다.</p>
       </div>
-    )
+      <CodeManagement initialCodes={codes} />
+    </div>
+  )
   } catch (error) {
     console.error("Codes page error:", error)
     return (

@@ -6,11 +6,11 @@ import { LearningModule, Code, LearningItem } from "@prisma/client"
 
 export default async function LearningPage() {
   try {
-    const session = await getServerSession(authOptions)
+  const session = await getServerSession(authOptions)
 
-    if (!session || (session.user.role !== "SUPER_ADMIN" && session.user.role !== "MANAGER")) {
-      return null
-    }
+  if (!session || (session.user.role !== "SUPER_ADMIN" && session.user.role !== "MANAGER")) {
+    return null
+  }
 
     let modules: (LearningModule & { level: Code; grade: Code | null; items: LearningItem[] })[] = []
     let codes: Code[] = []
@@ -18,33 +18,33 @@ export default async function LearningPage() {
     try {
       [modules, codes] = await Promise.all([
         prisma.learningModule.findMany({
-          include: {
-            level: true,
-            grade: true,
-            items: true,
-          },
-          orderBy: { createdAt: "desc" },
+    include: {
+      level: true,
+      grade: true,
+      items: true,
+    },
+    orderBy: { createdAt: "desc" },
         }),
         prisma.code.findMany({
-          orderBy: [
-            { category: "asc" },
-            { order: "asc" },
-          ],
+    orderBy: [
+      { category: "asc" },
+      { order: "asc" },
+    ],
         }),
       ])
     } catch (error) {
       console.error("Error fetching learning data:", error)
     }
 
-    return (
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold">학습 관리</h1>
-          <p className="text-muted-foreground">학습 콘텐츠를 등록하고 관리합니다.</p>
-        </div>
-        <LearningManagement initialModules={modules} codes={codes} />
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-3xl font-bold">학습 관리</h1>
+        <p className="text-muted-foreground">학습 콘텐츠를 등록하고 관리합니다.</p>
       </div>
-    )
+      <LearningManagement initialModules={modules} codes={codes} />
+    </div>
+  )
   } catch (error) {
     console.error("Learning page error:", error)
     return (

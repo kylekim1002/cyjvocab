@@ -30,38 +30,38 @@ export const authOptions: NextAuthOptions = {
           // Prisma 연결 확인 (에러가 나도 계속 진행)
           await ensurePrismaConnection()
 
-          // 자동로그인 처리 (password가 특별한 값인 경우)
-          if (credentials?.password === "auto-login-token" && credentials?.username) {
+        // 자동로그인 처리 (password가 특별한 값인 경우)
+        if (credentials?.password === "auto-login-token" && credentials?.username) {
             try {
-              // username이 실제로는 토큰인 경우
-              const user = await verifyAutoLoginToken(credentials.username)
-              if (user) {
-                return {
-                  id: user.id,
-                  username: user.username,
-                  role: user.role,
-                  campusId: user.campusId,
-                  studentId: user.studentId,
-                  studentStatus: user.studentStatus,
-                  hasActiveClass: user.hasActiveClass,
-                }
+          // username이 실제로는 토큰인 경우
+          const user = await verifyAutoLoginToken(credentials.username)
+          if (user) {
+            return {
+              id: user.id,
+              username: user.username,
+              role: user.role,
+              campusId: user.campusId,
+              studentId: user.studentId,
+              studentStatus: user.studentStatus,
+              hasActiveClass: user.hasActiveClass,
+            }
               }
             } catch (error) {
               console.error("Auto login error:", error)
-            }
-            return null
           }
+          return null
+        }
 
-          // 일반 로그인
-          if (!credentials?.username || !credentials?.password) {
-            return null
-          }
+        // 일반 로그인
+        if (!credentials?.username || !credentials?.password) {
+          return null
+        }
 
-          // 레이트 리밋 확인
+        // 레이트 리밋 확인
           try {
-            const canProceed = await checkRateLimit(credentials.username)
-            if (!canProceed) {
-              throw new Error("로그인 시도가 너무 많습니다. 3분 후 다시 시도해주세요.")
+        const canProceed = await checkRateLimit(credentials.username)
+        if (!canProceed) {
+          throw new Error("로그인 시도가 너무 많습니다. 3분 후 다시 시도해주세요.")
             }
           } catch (error: any) {
             // 레이트 리밋 에러는 그대로 throw
@@ -70,30 +70,30 @@ export const authOptions: NextAuthOptions = {
             }
             console.error("Rate limit check error:", error)
             // 다른 에러는 무시하고 계속 진행
-          }
+        }
 
-          const ipAddress = req?.headers?.["x-forwarded-for"] || 
-                           req?.headers?.["x-real-ip"] || 
-                           undefined
+        const ipAddress = req?.headers?.["x-forwarded-for"] || 
+                         req?.headers?.["x-real-ip"] || 
+                         undefined
 
-          const user = await verifyCredentials(
-            credentials.username,
-            credentials.password,
-            Array.isArray(ipAddress) ? ipAddress[0] : ipAddress
-          )
+        const user = await verifyCredentials(
+          credentials.username,
+          credentials.password,
+          Array.isArray(ipAddress) ? ipAddress[0] : ipAddress
+        )
 
-          if (!user) {
-            return null
-          }
+        if (!user) {
+          return null
+        }
 
-          return {
-            id: user.id,
-            username: user.username,
-            role: user.role,
-            campusId: user.campusId,
-            studentId: user.studentId,
-            studentStatus: user.studentStatus,
-            hasActiveClass: user.hasActiveClass,
+        return {
+          id: user.id,
+          username: user.username,
+          role: user.role,
+          campusId: user.campusId,
+          studentId: user.studentId,
+          studentStatus: user.studentStatus,
+          hasActiveClass: user.hasActiveClass,
           }
         } catch (error: any) {
           console.error("Auth authorize error:", error)

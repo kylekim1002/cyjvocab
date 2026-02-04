@@ -6,21 +6,21 @@ import { CodeCategory } from "@prisma/client"
 
 export async function GET() {
   try {
-    const session = await getServerSession(authOptions)
+  const session = await getServerSession(authOptions)
 
-    // 코드값 관리는 최종 관리자만 가능
-    if (!session || session.user.role !== "SUPER_ADMIN") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
+  // 코드값 관리는 최종 관리자만 가능
+  if (!session || session.user.role !== "SUPER_ADMIN") {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
 
-    const codes = await prisma.code.findMany({
-      orderBy: [
-        { category: "asc" },
-        { order: "asc" },
-      ],
-    })
+  const codes = await prisma.code.findMany({
+    orderBy: [
+      { category: "asc" },
+      { order: "asc" },
+    ],
+  })
 
-    return NextResponse.json(codes)
+  return NextResponse.json(codes)
   } catch (error) {
     console.error("Error fetching codes:", error)
     return NextResponse.json(
@@ -47,15 +47,15 @@ export async function POST(request: Request) {
       )
     }
 
-    // 코드값 관리는 최종 관리자만 가능
+  // 코드값 관리는 최종 관리자만 가능
     if (!session || !session.user || session.user.role !== "SUPER_ADMIN") {
       console.error("Unauthorized code creation attempt:", {
         hasSession: !!session,
         hasUser: !!session?.user,
         role: session?.user?.role,
       })
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
 
     // 요청 본문 파싱
     let body

@@ -114,7 +114,7 @@ export function LearningContent({
           })
           return
         } else {
-          // 다른 phase의 세션이면 삭제하고 새 세션 시작
+        // 다른 phase의 세션이면 삭제하고 새 세션 시작
           fetch(`/api/student/sessions/${inProgressSession.id}`, {
             method: "DELETE",
           }).catch(console.error)
@@ -247,10 +247,12 @@ export function LearningContent({
         }
       })
       
+      const sortedItems = [...module.items].sort((a, b) => a.order - b.order)
       console.log("Sending quiz answers:", {
         original: quizAnswers,
         normalized: normalizedQuizAnswers,
-        moduleItemsCount: module.items.length,
+        moduleItemsCount: sortedItems.length,
+        sortedItemsOrder: sortedItems.map((item, idx) => ({ idx, order: item.order, word: item.payloadJson?.word_text })),
       })
       
       // quizAnswers와 phase를 함께 전달
@@ -339,7 +341,8 @@ export function LearningContent({
   }
 
   const handleNext = async () => {
-    if (currentIndex < module.items.length - 1) {
+    const sortedItems = [...module.items].sort((a, b) => a.order - b.order)
+    if (currentIndex < sortedItems.length - 1) {
       const newIndex = currentIndex + 1
       
       // 테스트 단계에서는 답안 자동 저장
@@ -374,6 +377,7 @@ export function LearningContent({
       
       // 단어목록/암기학습 진행률 업데이트
       if (phase === "wordlist" || phase === "memorization") {
+        const sortedItems = [...module.items].sort((a, b) => a.order - b.order)
         await updateProgress(newIndex)
       }
     }
@@ -419,6 +423,7 @@ export function LearningContent({
   const updateProgress = async (index: number) => {
     try {
       const mode = phase === "wordlist" ? "WORDLIST" : "MEMORIZE"
+      const sortedItems = [...module.items].sort((a, b) => a.order - b.order)
       const response = await fetch("/api/student/progress/update", {
         method: "POST",
         headers: {
@@ -429,7 +434,7 @@ export function LearningContent({
           moduleId: module.id,
           mode,
           currentIndex: index,
-          totalCount: module.items.length,
+          totalCount: sortedItems.length,
         }),
       })
 
@@ -462,6 +467,7 @@ export function LearningContent({
     setIsLoading(true)
     try {
       const mode = phase === "wordlist" ? "WORDLIST" : "MEMORIZE"
+      const sortedItems = [...module.items].sort((a, b) => a.order - b.order)
       // 마지막 인덱스로 진행률 업데이트 (100%)
       const response = await fetch("/api/student/progress/update", {
         method: "POST",
@@ -472,8 +478,8 @@ export function LearningContent({
           assignmentId,
           moduleId: module.id,
           mode,
-          currentIndex: module.items.length - 1,
-          totalCount: module.items.length,
+          currentIndex: sortedItems.length - 1,
+          totalCount: sortedItems.length,
         }),
       })
 
@@ -538,9 +544,6 @@ export function LearningContent({
     const correctIndex = item.payloadJson.correct_index || 0
     return item.payloadJson[`choice${correctIndex + 1}`] || ""
   }
-
-  const currentItem = module.items[currentIndex]
-  const isLast = currentIndex === module.items.length - 1
 
   // payloadJson이 없거나 구조가 잘못된 경우 처리
   if (!currentItem || !currentItem.payloadJson) {
@@ -616,6 +619,13 @@ export function LearningContent({
     return studentAnswer === correctIndex
   }
 
+  // 항상 order로 정렬된 배열 사용 (서버와 동일한 순서 보장)
+  const sortedItems = [...module.items].sort((a, b) => a.order - b.order)
+
+  // 정렬된 배열을 기반으로 currentItem과 isLast 계산
+  const currentItem = sortedItems[currentIndex]
+  const isLast = currentIndex === sortedItems.length - 1
+
   return (
     <div className="container mx-auto p-4 space-y-4">
       {/* 학습 결과 다이얼로그 */}
@@ -660,12 +670,12 @@ export function LearningContent({
                 const studentAnswer = normalizedCompletedAnswers[arrayIndex]
                 const isCorrectAnswer = studentAnswer !== undefined && !isNaN(studentAnswer) && studentAnswer === correctIndex
                 
-                const choices = [
-                  item.payloadJson?.choice1,
-                  item.payloadJson?.choice2,
-                  item.payloadJson?.choice3,
-                  item.payloadJson?.choice4,
-                ].filter(Boolean)
+              const choices = [
+                item.payloadJson?.choice1,
+                item.payloadJson?.choice2,
+                item.payloadJson?.choice3,
+                item.payloadJson?.choice4,
+              ].filter(Boolean)
 
                 console.log(`결과 표시 - Item ${arrayIndex} (order: ${item.order}):`, {
                   wordText: item.payloadJson?.word_text,
@@ -851,18 +861,22 @@ export function LearningContent({
                           className="w-full justify-start"
                           onClick={() => {
                             // 키를 명시적으로 숫자로 변환하여 저장
+                            const sortedItems = [...module.items].sort((a, b) => a.order - b.order)
                             const newAnswers = { ...quizAnswers }
                             newAnswers[numKey] = Number(idx)
-                            console.log("Setting quiz answer:", {
+                            console.log("Setting quiz answer (TYPE_A):", {
                               answerKey,
                               numKey,
                               currentIndex,
+                              itemOrder: currentItem.order,
+                              sortedItemsOrder: sortedItems.map((item, i) => ({ index: i, order: item.order, word: item.payloadJson?.word_text })),
                               selectedChoiceIndex: idx,
                               correctIndex: currentItem.payloadJson?.correct_index,
                               wordText: currentItem.payloadJson?.word_text,
                               beforeAnswer: storedAnswer,
                               afterAnswer: newAnswers[numKey],
                               allAnswers: newAnswers,
+                              allAnswersKeys: Object.keys(newAnswers).map(k => ({ key: k, type: typeof k, value: newAnswers[k] })),
                             })
                             setQuizAnswers(newAnswers)
                           }}
@@ -913,12 +927,15 @@ export function LearningContent({
                           className="w-full justify-start"
                           onClick={() => {
                             // 키를 명시적으로 숫자로 변환하여 저장
+                            const sortedItems = [...module.items].sort((a, b) => a.order - b.order)
                             const newAnswers = { ...quizAnswers }
                             newAnswers[numKey] = Number(idx)
-                            console.log("Setting quiz answer:", { 
-                              answerKey,
+                            console.log("Setting quiz answer (TYPE_B):", { 
+                              answerKey, 
                               numKey,
                               currentIndex,
+                              itemOrder: currentItem.order,
+                              sortedItemsOrder: sortedItems.map((item, i) => ({ index: i, order: item.order, word: item.payloadJson?.word_text })),
                               selectedChoiceIndex: idx, 
                               phase, 
                               itemId: currentItem.id, 
@@ -927,6 +944,7 @@ export function LearningContent({
                               beforeAnswer: storedAnswer,
                               afterAnswer: newAnswers[numKey],
                               allAnswers: newAnswers,
+                              allAnswersKeys: Object.keys(newAnswers).map(k => ({ key: k, type: typeof k, value: newAnswers[k] })),
                             })
                             setQuizAnswers(newAnswers)
                           }}
@@ -960,7 +978,7 @@ export function LearningContent({
               이전
             </Button>
             <span className="text-sm text-muted-foreground">
-              {currentIndex + 1} / {module.items.length}
+              {currentIndex + 1} / {sortedItems.length}
             </span>
             {isLast ? (
               phase === "test" ? (

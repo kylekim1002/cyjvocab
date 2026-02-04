@@ -44,7 +44,7 @@ export function CodeManagement({ initialCodes }: CodeManagementProps) {
           setCodes(latestCodes)
         } else if (Array.isArray(latestCodes)) {
           // 빈 배열인 경우에만 업데이트 (실제로 데이터가 없는 경우)
-          setCodes(latestCodes)
+        setCodes(latestCodes)
         }
         // 응답이 실패하거나 유효하지 않으면 기존 상태 유지
       } else {
