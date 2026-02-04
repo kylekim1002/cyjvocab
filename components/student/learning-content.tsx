@@ -214,6 +214,24 @@ export function LearningContent({
       return
     }
 
+    // 테스트 단계에서는 마지막 문제의 답이 선택되었는지 확인
+    if (phase === "test" && (module.type === "TYPE_A" || module.type === "TYPE_B")) {
+      const sortedItems = [...module.items].sort((a, b) => a.order - b.order)
+      const safeCurrentIndex = Math.max(0, Math.min(currentIndex, sortedItems.length - 1))
+      const numKey = Number(safeCurrentIndex)
+      const hasAnswer = quizAnswers[numKey] !== undefined && quizAnswers[numKey] !== null
+      
+      if (!hasAnswer) {
+        // 답이 선택되지 않았으면 경고 표시하고 진행하지 않음
+        setShowAnswerRequired(true)
+        // 3초 후 경고 메시지 자동 숨김
+        setTimeout(() => {
+          setShowAnswerRequired(false)
+        }, 3000)
+        return
+      }
+    }
+
     console.log("handleComplete called", { sessionId, assignmentId, moduleId: module.id, inProgressSession })
     
     // sessionId가 없으면 inProgressSession에서 가져오기 시도
@@ -1031,15 +1049,32 @@ export function LearningContent({
             </span>
             {isLast ? (
               phase === "test" ? (
-                <Button 
-                  onClick={() => {
-                    console.log("Complete button clicked", { sessionId, inProgressSession, currentIndex, moduleItemsLength: module.items.length })
-                    handleComplete()
-                  }} 
-                  disabled={isLoading}
-                >
-                  {isLoading ? "처리 중..." : "완료"}
-                </Button>
+                <div className="flex flex-col items-end gap-1">
+                  {(() => {
+                    // 완료 버튼도 답 선택 확인
+                    const numKey = Number(safeCurrentIndex)
+                    const hasAnswer = quizAnswers[numKey] !== undefined && quizAnswers[numKey] !== null
+                    const showRequired = !hasAnswer && showAnswerRequired
+                    
+                    return (
+                      <>
+                        <Button 
+                          onClick={() => {
+                            console.log("Complete button clicked", { sessionId, inProgressSession, currentIndex, moduleItemsLength: module.items.length })
+                            handleComplete()
+                          }} 
+                          disabled={isLoading}
+                          className={showRequired ? "bg-red-500 hover:bg-red-600 text-white" : ""}
+                        >
+                          {isLoading ? "처리 중..." : "완료"}
+                        </Button>
+                        {showRequired && (
+                          <span className="text-xs text-red-500">답을 선택하세요</span>
+                        )}
+                      </>
+                    )
+                  })()}
+                </div>
               ) : (
                 <Button 
                   onClick={handleWordlistMemorizeComplete}
@@ -1049,10 +1084,39 @@ export function LearningContent({
                 </Button>
               )
             ) : (
-              <Button onClick={handleNext}>
-                다음
-                <ArrowRight className="h-4 w-4 ml-2" />
-              </Button>
+              <div className="flex flex-col items-end gap-1">
+                {(() => {
+                  // 테스트 단계에서는 답 선택 확인
+                  if (phase === "test" && (module.type === "TYPE_A" || module.type === "TYPE_B")) {
+                    const numKey = Number(safeCurrentIndex)
+                    const hasAnswer = quizAnswers[numKey] !== undefined && quizAnswers[numKey] !== null
+                    const showRequired = !hasAnswer && showAnswerRequired
+                    
+                    return (
+                      <>
+                        <Button 
+                          onClick={handleNext}
+                          className={showRequired ? "bg-red-500 hover:bg-red-600 text-white" : ""}
+                        >
+                          다음
+                          <ArrowRight className="h-4 w-4 ml-2" />
+                        </Button>
+                        {showRequired && (
+                          <span className="text-xs text-red-500">답을 선택하세요</span>
+                        )}
+                      </>
+                    )
+                  }
+                  
+                  // 단어목록/암기학습은 답 선택 불필요
+                  return (
+                    <Button onClick={handleNext}>
+                      다음
+                      <ArrowRight className="h-4 w-4 ml-2" />
+                    </Button>
+                  )
+                })()}
+              </div>
             )}
           </div>
         </CardContent>
