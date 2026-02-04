@@ -114,6 +114,19 @@ export async function POST(request: Request) {
       )
     }
     
+    // 데이터베이스 연결 에러인 경우
+    if (error.message?.includes("FATAL") || error.message?.includes("Tenant") || error.message?.includes("user not found")) {
+      return NextResponse.json(
+        { 
+          error: "데이터베이스 연결에 실패했습니다.",
+          details: "DATABASE_URL 환경 변수를 확인해주세요. Supabase 프로젝트의 올바른 연결 문자열을 사용해야 합니다.",
+          technicalError: error.message,
+          hint: "Supabase 대시보드 > Project Settings > Database > Connection String (Transaction mode) 사용",
+        },
+        { status: 500 }
+      )
+    }
+    
     return NextResponse.json(
       { 
         error: "코드값 생성에 실패했습니다.",
