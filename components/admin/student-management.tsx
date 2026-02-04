@@ -74,8 +74,20 @@ export function StudentManagement({
       const response = await fetch("/api/admin/students")
       if (response.ok) {
         const latestStudents = await response.json()
-        setStudents(latestStudents)
-        setFilteredStudents(latestStudents)
+        // API 응답을 컴포넌트가 기대하는 형식으로 변환
+        const transformedStudents = latestStudents.map((student: any) => ({
+          ...student,
+          campus: student.campus || { id: "", name: "" },
+          grade: student.grade || null,
+          level: student.level || null,
+        }))
+        setStudents(transformedStudents)
+        setFilteredStudents(transformedStudents)
+        console.log("Refreshed students:", transformedStudents.length)
+      } else {
+        console.error("Failed to refresh students: HTTP", response.status)
+        const errorText = await response.text()
+        console.error("Error response:", errorText)
       }
     } catch (error) {
       console.error("Failed to refresh students:", error)

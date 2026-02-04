@@ -19,16 +19,13 @@ export async function GET(request: Request) {
     const gradeId = searchParams.get("grade_id")
     const levelId = searchParams.get("level_id")
 
-    if (!campusId) {
-      return NextResponse.json(
-        { error: "campus_id는 필수입니다." },
-        { status: 400 }
-      )
-    }
-
     const where: any = {
-      campusId,
       status: "ACTIVE",
+    }
+    
+    // campus_id가 있으면 필터링, 없으면 모든 학생 조회
+    if (campusId) {
+      where.campusId = campusId
     }
 
     if (name) {

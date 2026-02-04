@@ -55,7 +55,20 @@ export function ClassManagement({
       const response = await fetch("/api/admin/classes")
       if (response.ok) {
         const latestClasses = await response.json()
-        setClasses(latestClasses)
+        // API 응답을 컴포넌트가 기대하는 형식으로 변환
+        const transformedClasses = latestClasses.map((cls: any) => ({
+          id: cls.id,
+          name: cls.name,
+          createdAt: cls.createdAt,
+          campus: cls.campus || { id: "", name: "" },
+          level: cls.level || { value: "" },
+          grade: cls.grade || { value: "" },
+          teacher: cls.teacher || { name: "" },
+        }))
+        setClasses(transformedClasses)
+        console.log("Refreshed classes:", transformedClasses.length)
+      } else {
+        console.error("Failed to refresh classes: HTTP", response.status)
       }
     } catch (error) {
       console.error("Failed to refresh classes:", error)
