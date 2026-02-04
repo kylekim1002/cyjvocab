@@ -40,10 +40,20 @@ export function CodeManagement({ initialCodes }: CodeManagementProps) {
       const response = await fetch("/api/admin/codes")
       if (response.ok) {
         const latestCodes = await response.json()
-        setCodes(latestCodes)
+        if (Array.isArray(latestCodes) && latestCodes.length > 0) {
+          setCodes(latestCodes)
+        } else if (Array.isArray(latestCodes)) {
+          // 빈 배열인 경우에만 업데이트 (실제로 데이터가 없는 경우)
+          setCodes(latestCodes)
+        }
+        // 응답이 실패하거나 유효하지 않으면 기존 상태 유지
+      } else {
+        console.error("Failed to refresh codes: HTTP", response.status)
+        // 실패해도 기존 상태 유지
       }
     } catch (error) {
       console.error("Failed to refresh codes:", error)
+      // 에러 발생해도 기존 상태 유지
     }
   }
 
@@ -116,23 +126,27 @@ export function CodeManagement({ initialCodes }: CodeManagementProps) {
       })
 
       if (!response.ok) {
-        throw new Error("추가 실패")
+        const errorData = await response.json().catch(() => ({ error: "추가 실패" }))
+        throw new Error(errorData.error || "추가 실패")
       }
 
       const newCode = await response.json()
-      await refreshCodes() // 서버에서 최신 데이터 가져오기
+      // 성공한 경우에만 새로고침
+      await refreshCodes()
       setNewValue("")
       setNewOrder(0)
       toast({
         title: "성공",
         description: "코드값이 추가되었습니다.",
       })
-    } catch (error) {
+    } catch (error: any) {
+      const errorMessage = error.message || "코드값 추가에 실패했습니다."
       toast({
         title: "오류",
-        description: "코드값 추가에 실패했습니다.",
+        description: errorMessage,
         variant: "destructive",
       })
+      // 실패 시 refreshCodes를 호출하지 않음 (기존 상태 유지)
     }
   }
 

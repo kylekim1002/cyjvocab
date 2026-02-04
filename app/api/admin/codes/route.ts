@@ -5,21 +5,29 @@ import { prisma } from "@/lib/prisma"
 import { CodeCategory } from "@prisma/client"
 
 export async function GET() {
-  const session = await getServerSession(authOptions)
+  try {
+    const session = await getServerSession(authOptions)
 
-  // 코드값 관리는 최종 관리자만 가능
-  if (!session || session.user.role !== "SUPER_ADMIN") {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    // 코드값 관리는 최종 관리자만 가능
+    if (!session || session.user.role !== "SUPER_ADMIN") {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    const codes = await prisma.code.findMany({
+      orderBy: [
+        { category: "asc" },
+        { order: "asc" },
+      ],
+    })
+
+    return NextResponse.json(codes)
+  } catch (error) {
+    console.error("Error fetching codes:", error)
+    return NextResponse.json(
+      { error: "코드값 조회에 실패했습니다." },
+      { status: 500 }
+    )
   }
-
-  const codes = await prisma.code.findMany({
-    orderBy: [
-      { category: "asc" },
-      { order: "asc" },
-    ],
-  })
-
-  return NextResponse.json(codes)
 }
 
 export async function POST(request: Request) {
