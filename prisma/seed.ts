@@ -49,12 +49,14 @@ async function main() {
     where: { username: 'cyjkyle' },
     update: {
       password: hashedPassword, // 비밀번호 업데이트
+      isActive: true, // 활성 상태 보장
     },
     create: {
       username: 'cyjkyle',
       password: hashedPassword,
       name: '관리자',
       role: 'SUPER_ADMIN' as const,
+      isActive: true, // 활성 상태로 생성
     },
   })
 
