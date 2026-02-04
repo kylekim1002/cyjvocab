@@ -87,28 +87,38 @@ export async function POST(request: Request) {
       )
     }
 
-    // Prisma 연결 확인
+    // 코드 생성 (Prisma가 자동으로 연결 관리)
+    let code
     try {
-      await prisma.$connect()
-    } catch (dbError: any) {
-      console.error("Database connection error:", dbError)
-      return NextResponse.json(
-        { 
-          error: "데이터베이스 연결에 실패했습니다.",
-          details: dbError.message,
+      code = await prisma.code.create({
+        data: {
+          category: category as CodeCategory,
+          value: value.trim(),
+          order: order || 0,
         },
-        { status: 500 }
-      )
+      })
+    } catch (dbError: any) {
+      console.error("Database operation error:", {
+        message: dbError.message,
+        code: dbError.code,
+        meta: dbError.meta,
+      })
+      
+      // 데이터베이스 연결 에러인 경우
+      if (dbError.message?.includes("FATAL") || dbError.message?.includes("Tenant") || dbError.message?.includes("user not found")) {
+        return NextResponse.json(
+          { 
+            error: "데이터베이스 연결에 실패했습니다.",
+            details: "데이터베이스 설정을 확인해주세요. DATABASE_URL 환경 변수가 올바르게 설정되어 있는지 확인하세요.",
+            technicalError: dbError.message,
+          },
+          { status: 500 }
+        )
+      }
+      
+      // 다른 Prisma 에러는 아래 catch 블록에서 처리
+      throw dbError
     }
-
-    // 코드 생성
-    const code = await prisma.code.create({
-      data: {
-        category: category as CodeCategory,
-        value: value.trim(),
-        order: order || 0,
-      },
-    })
 
     console.log("Code created successfully:", { id: code.id, category: code.category, value: code.value })
     return NextResponse.json(code)
