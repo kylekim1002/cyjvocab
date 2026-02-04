@@ -18,6 +18,10 @@ export async function verifyCredentials(
   ipAddress?: string
 ): Promise<AuthUser | null> {
   try {
+    console.log("=== verifyCredentials 시작 ===")
+    console.log("Username:", username)
+    console.log("Password length:", password?.length)
+    
     const user = await prisma.user.findUnique({
       where: { username },
       include: {
@@ -36,7 +40,18 @@ export async function verifyCredentials(
       },
     })
 
+    console.log("User found:", {
+      exists: !!user,
+      id: user?.id,
+      username: user?.username,
+      role: user?.role,
+      isActive: user?.isActive,
+      hasStudent: !!user?.student,
+      studentStatus: user?.student?.status,
+    })
+
     if (!user) {
+      console.log("User not found for username:", username)
       // 로그인 실패 기록
       await recordLoginAttempt(username, false, ipAddress)
       return null
@@ -44,6 +59,7 @@ export async function verifyCredentials(
 
     // 관리자/학생 공통: 비활성 사용자는 로그인 불가
     if (!user.isActive) {
+      console.log("User is not active:", user.id)
       await recordLoginAttempt(username, false, ipAddress, user.id)
       return null
     }
@@ -51,6 +67,7 @@ export async function verifyCredentials(
     // 학생인 경우 상태 확인
     if (user.role === UserRole.STUDENT && user.student) {
       if (user.student.status !== StudentStatus.ACTIVE) {
+        console.log("Student is not ACTIVE:", user.student.status)
         await recordLoginAttempt(username, false, ipAddress, user.id)
         return null
       }
@@ -59,12 +76,18 @@ export async function verifyCredentials(
       // 클래스 배정이 없어도 로그인은 가능하지만, 학습 기능은 제한됨
     }
 
+    console.log("비밀번호 확인 시작...")
     const isValid = await bcrypt.compare(password, user.password)
+    console.log("비밀번호 확인 결과:", isValid)
+    console.log("저장된 해시:", user.password.substring(0, 20) + "...")
+    
     if (!isValid) {
+      console.log("비밀번호 불일치")
       await recordLoginAttempt(username, false, ipAddress, user.id)
       return null
     }
 
+    console.log("로그인 성공!")
     // 성공 기록
     await recordLoginAttempt(username, true, ipAddress, user.id)
 
@@ -80,6 +103,12 @@ export async function verifyCredentials(
   } catch (error: any) {
     // 데이터베이스 연결 실패 시 에러 로깅
     console.error('Database connection error in verifyCredentials:', error)
+    console.error('Error details:', {
+      message: error.message,
+      code: error.code,
+      name: error.name,
+      stack: error.stack,
+    })
     // 에러를 throw하지 않고 null 반환 (로그인 실패로 처리)
     return null
   }
