@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -27,7 +27,15 @@ interface CampusManagementProps {
 
 export function CampusManagement({ initialCampuses }: CampusManagementProps) {
   const { toast } = useToast()
-  const [campuses, setCampuses] = useState(initialCampuses)
+  const [campuses, setCampuses] = useState(initialCampuses || [])
+  
+  // 컴포넌트 마운트 시 데이터가 없으면 서버에서 가져오기
+  useEffect(() => {
+    if (!initialCampuses || initialCampuses.length === 0) {
+      refreshCampuses()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   const [newCampusName, setNewCampusName] = useState("")
   const [selectedCampus, setSelectedCampus] = useState<string | null>(null)
   const [newTeacherName, setNewTeacherName] = useState("")

@@ -24,50 +24,57 @@ export default async function StudentsPage() {
     try {
       [campuses, gradeCodes, levelCodes, students] = await Promise.all([
         prisma.campus.findMany({
-    orderBy: { name: "asc" },
+          orderBy: { name: "asc" },
         }),
         prisma.code.findMany({
-    where: { category: "GRADE" },
-    orderBy: { order: "asc" },
+          where: { category: "GRADE" },
+          orderBy: { order: "asc" },
         }),
         prisma.code.findMany({
-    where: { category: "LEVEL" },
-    orderBy: { order: "asc" },
+          where: { category: "LEVEL" },
+          orderBy: { order: "asc" },
         }),
         prisma.student.findMany({
-    select: {
-      id: true,
-      name: true,
-      username: true,
-      plainPassword: true,
-      status: true,
-      school: true,
-      autoLoginToken: true,
-      createdAt: true,
-      campus: {
-        select: {
-          id: true,
-          name: true,
-        },
-      },
-      grade: {
-        select: {
-          id: true,
-          value: true,
-        },
-      },
-      level: {
-        select: {
-          id: true,
-          value: true,
-        },
-      },
-    },
-    orderBy: { createdAt: "desc" },
+          select: {
+            id: true,
+            name: true,
+            username: true,
+            plainPassword: true,
+            status: true,
+            school: true,
+            autoLoginToken: true,
+            createdAt: true,
+            campus: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+            grade: {
+              select: {
+                id: true,
+                value: true,
+              },
+            },
+            level: {
+              select: {
+                id: true,
+                value: true,
+              },
+            },
+          },
+          orderBy: { createdAt: "desc" },
         }),
       ])
+      console.log("Fetched students data:", {
+        campuses: campuses.length,
+        gradeCodes: gradeCodes.length,
+        levelCodes: levelCodes.length,
+        students: students.length,
+      })
     } catch (error) {
       console.error("Error fetching students data:", error)
+      // 에러가 발생해도 빈 배열로 계속 진행 (컴포넌트에서 처리)
     }
 
     // StudentManagement 컴포넌트가 기대하는 타입으로 변환

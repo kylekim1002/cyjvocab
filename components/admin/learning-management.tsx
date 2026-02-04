@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -76,6 +76,27 @@ export function LearningManagement({
 
   const levelCodes = codes.filter((c) => c.category === "LEVEL")
   const gradeCodes = codes.filter((c) => c.category === "GRADE")
+
+  // 서버에서 최신 데이터 가져오기
+  const refreshModules = async () => {
+    try {
+      const response = await fetch("/api/admin/learning-modules")
+      if (response.ok) {
+        const latestModules = await response.json()
+        setModules(latestModules)
+      }
+    } catch (error) {
+      console.error("Failed to refresh modules:", error)
+    }
+  }
+
+  // 컴포넌트 마운트 시 데이터가 없으면 서버에서 가져오기
+  useEffect(() => {
+    if (!initialModules || initialModules.length === 0) {
+      refreshModules()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // 문항 추가
   const handleAddItem = () => {
