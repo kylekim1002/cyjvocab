@@ -74,8 +74,17 @@ export async function POST(request: Request) {
     return NextResponse.json({ id: user.id }, { status: 201 })
   } catch (error: any) {
     console.error("Create manager error:", error)
+    if (error.code === "P2002") {
+      return NextResponse.json(
+        { error: "이미 사용 중인 아이디입니다." },
+        { status: 400 }
+      )
+    }
     return NextResponse.json(
-      { error: "관리자 생성에 실패했습니다." },
+      { 
+        error: "관리자 생성에 실패했습니다.",
+        details: process.env.NODE_ENV === "development" ? error.message : undefined
+      },
       { status: 500 }
     )
   }

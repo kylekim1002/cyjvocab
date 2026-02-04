@@ -52,6 +52,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json(teacher)
   } catch (error: any) {
+    console.error("Teacher creation error:", error)
     if (error.code === "P2002") {
       return NextResponse.json(
         { error: "이미 존재하는 선생님입니다." },
@@ -59,7 +60,10 @@ export async function POST(request: Request) {
       )
     }
     return NextResponse.json(
-      { error: "선생님 생성에 실패했습니다." },
+      { 
+        error: "선생님 생성에 실패했습니다.",
+        details: process.env.NODE_ENV === "development" ? error.message : undefined
+      },
       { status: 500 }
     )
   }

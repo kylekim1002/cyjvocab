@@ -58,6 +58,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json(code)
   } catch (error: any) {
+    console.error("Code creation error:", error)
     if (error.code === "P2002") {
       return NextResponse.json(
         { error: "이미 존재하는 코드값입니다." },
@@ -65,7 +66,10 @@ export async function POST(request: Request) {
       )
     }
     return NextResponse.json(
-      { error: "코드값 생성에 실패했습니다." },
+      { 
+        error: "코드값 생성에 실패했습니다.",
+        details: process.env.NODE_ENV === "development" ? error.message : undefined
+      },
       { status: 500 }
     )
   }

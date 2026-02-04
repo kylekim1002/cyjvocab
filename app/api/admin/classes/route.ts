@@ -78,10 +78,25 @@ export async function POST(request: Request) {
     })
 
     return NextResponse.json(cls)
-  } catch (error) {
+  } catch (error: any) {
     console.error("Create class error:", error)
+    if (error.code === "P2002") {
+      return NextResponse.json(
+        { error: "이미 존재하는 클래스입니다." },
+        { status: 400 }
+      )
+    }
+    if (error.code === "P2003") {
+      return NextResponse.json(
+        { error: "존재하지 않는 캠퍼스, 레벨, 학년 또는 선생님입니다." },
+        { status: 400 }
+      )
+    }
     return NextResponse.json(
-      { error: "클래스 생성에 실패했습니다." },
+      { 
+        error: "클래스 생성에 실패했습니다.",
+        details: process.env.NODE_ENV === "development" ? error.message : undefined
+      },
       { status: 500 }
     )
   }
