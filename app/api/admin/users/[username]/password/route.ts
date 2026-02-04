@@ -46,6 +46,7 @@ export async function PATCH(
       where: { username: params.username },
       data: {
         password: hashedPassword,
+        isActive: true, // 비밀번호 업데이트 시 활성 상태 보장
       },
     })
 
