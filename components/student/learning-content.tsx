@@ -63,6 +63,7 @@ export function LearningContent({
   const [wordlistMaxIndex, setWordlistMaxIndex] = useState<number>(-1)
   const [memorizeMaxIndex, setMemorizeMaxIndex] = useState<number>(-1)
   const [showMeaning, setShowMeaning] = useState<boolean>(false) // 암기학습용 토글
+  const [showAnswerRequired, setShowAnswerRequired] = useState<boolean>(false) // 답 선택 필수 경고
 
   useEffect(() => {
     console.log("LearningContent useEffect", { inProgressSession, progress, sessionId, isReviewMode, completedSession, phase })
@@ -343,6 +344,26 @@ export function LearningContent({
   const handleNext = async () => {
     const sortedItems = [...module.items].sort((a, b) => a.order - b.order)
     const safeCurrentIndex = Math.max(0, Math.min(currentIndex, sortedItems.length - 1))
+    
+    // 테스트 단계에서는 답이 선택되었는지 확인
+    if (phase === "test" && (module.type === "TYPE_A" || module.type === "TYPE_B")) {
+      const numKey = Number(safeCurrentIndex)
+      const hasAnswer = quizAnswers[numKey] !== undefined && quizAnswers[numKey] !== null
+      
+      if (!hasAnswer) {
+        // 답이 선택되지 않았으면 경고 표시하고 진행하지 않음
+        setShowAnswerRequired(true)
+        // 3초 후 경고 메시지 자동 숨김
+        setTimeout(() => {
+          setShowAnswerRequired(false)
+        }, 3000)
+        return
+      }
+    }
+    
+    // 답이 선택되었으면 경고 메시지 숨김
+    setShowAnswerRequired(false)
+    
     if (safeCurrentIndex < sortedItems.length - 1) {
       const newIndex = safeCurrentIndex + 1
       
@@ -903,6 +924,8 @@ export function LearningContent({
                               allAnswersKeys: Object.keys(newAnswers).map(k => ({ key: k, type: typeof k, value: newAnswers[k] })),
                             })
                             setQuizAnswers(newAnswers)
+                            // 답을 선택하면 경고 메시지 숨김
+                            setShowAnswerRequired(false)
                           }}
                         >
                           {choice}
@@ -971,6 +994,8 @@ export function LearningContent({
                               allAnswersKeys: Object.keys(newAnswers).map(k => ({ key: k, type: typeof k, value: newAnswers[k] })),
                             })
                             setQuizAnswers(newAnswers)
+                            // 답을 선택하면 경고 메시지 숨김
+                            setShowAnswerRequired(false)
                           }}
                         >
                           {choice}
