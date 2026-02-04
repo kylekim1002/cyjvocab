@@ -52,6 +52,17 @@ export default async function ClassesPage() {
       console.error("Error fetching classes data:", error)
     }
 
+    // ClassManagement 컴포넌트가 기대하는 타입으로 변환
+    const transformedClasses = classes.map((cls) => ({
+      id: cls.id,
+      name: cls.name,
+      createdAt: cls.createdAt,
+      campus: cls.campus || { id: "", name: "" },
+      level: cls.level || { value: "" },
+      grade: cls.grade || { value: "" },
+      teacher: cls.teacher || { name: "" },
+    }))
+
     return (
       <div className="space-y-6">
         <div>
@@ -59,7 +70,7 @@ export default async function ClassesPage() {
           <p className="text-muted-foreground">클래스를 생성하고 관리합니다.</p>
         </div>
         <ClassManagement
-          initialClasses={classes}
+          initialClasses={transformedClasses}
           campuses={campuses}
           codes={codes}
         />
