@@ -3,6 +3,7 @@ import { authOptions } from "@/lib/auth-options"
 import { redirect } from "next/navigation"
 import { prisma } from "@/lib/prisma"
 import { ScoresManagement } from "@/components/admin/scores-management"
+import { Campus, Code } from "@prisma/client"
 
 export default async function ScoresPage() {
   try {
@@ -12,8 +13,8 @@ export default async function ScoresPage() {
       redirect("/admin")
     }
 
-    let campuses = []
-    let codes = []
+    let campuses: Campus[] = []
+    let codes: Code[] = []
 
     try {
       [campuses, codes] = await Promise.all([

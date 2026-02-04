@@ -2,6 +2,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth-options"
 import { ClassManagement } from "@/components/admin/class-management"
 import { prisma } from "@/lib/prisma"
+import { Class, Campus, Code, Teacher } from "@prisma/client"
 
 export default async function ClassesPage() {
   try {
@@ -11,9 +12,9 @@ export default async function ClassesPage() {
       return null
     }
 
-    let classes = []
-    let campuses = []
-    let codes = []
+    let classes: (Class & { campus: { id: string; name: string } | null; level: Code | null; grade: Code | null; teacher: Teacher | null })[] = []
+    let campuses: (Campus & { teachers: Teacher[] })[] = []
+    let codes: Code[] = []
 
     try {
       [classes, campuses, codes] = await Promise.all([

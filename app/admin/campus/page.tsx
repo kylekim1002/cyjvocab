@@ -2,6 +2,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth-options"
 import { CampusManagement } from "@/components/admin/campus-management"
 import { prisma } from "@/lib/prisma"
+import { Campus, Teacher } from "@prisma/client"
 
 export default async function CampusPage() {
   try {
@@ -11,7 +12,7 @@ export default async function CampusPage() {
       return null
     }
 
-    let campuses = []
+    let campuses: (Campus & { teachers: Teacher[] })[] = []
     try {
       campuses = await prisma.campus.findMany({
         include: {

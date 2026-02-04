@@ -3,6 +3,7 @@ import { redirect } from "next/navigation"
 import { authOptions } from "@/lib/auth-options"
 import { prisma } from "@/lib/prisma"
 import { AdminManagers } from "@/components/admin/managers"
+import { User, Campus } from "@prisma/client"
 
 export default async function ManagersPage() {
   try {
@@ -12,8 +13,8 @@ export default async function ManagersPage() {
       redirect("/admin")
     }
 
-    let managers = []
-    let campuses = []
+    let managers: (User & { campus: Campus | null })[] = []
+    let campuses: Campus[] = []
 
     try {
       [managers, campuses] = await Promise.all([

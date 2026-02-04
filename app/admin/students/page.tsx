@@ -2,6 +2,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth-options"
 import { StudentManagement } from "@/components/admin/student-management"
 import { prisma } from "@/lib/prisma"
+import { Campus, Code, Student } from "@prisma/client"
 
 export default async function StudentsPage() {
   try {
@@ -11,10 +12,14 @@ export default async function StudentsPage() {
       return null
     }
 
-    let campuses = []
-    let gradeCodes = []
-    let levelCodes = []
-    let students = []
+    let campuses: Campus[] = []
+    let gradeCodes: Code[] = []
+    let levelCodes: Code[] = []
+    let students: (Pick<Student, "id" | "name" | "username" | "plainPassword" | "status" | "school" | "autoLoginToken" | "createdAt"> & {
+      campus: { id: string; name: string } | null;
+      grade: { id: string; value: string } | null;
+      level: { id: string; value: string } | null;
+    })[] = []
 
     try {
       [campuses, gradeCodes, levelCodes, students] = await Promise.all([

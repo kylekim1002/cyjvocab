@@ -2,6 +2,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth-options"
 import { CodeManagement } from "@/components/admin/code-management"
 import { prisma } from "@/lib/prisma"
+import { Code } from "@prisma/client"
 
 export default async function CodesPage() {
   try {
@@ -11,7 +12,7 @@ export default async function CodesPage() {
       return null
     }
 
-    let codes = []
+    let codes: Code[] = []
     try {
       codes = await prisma.code.findMany({
         orderBy: [

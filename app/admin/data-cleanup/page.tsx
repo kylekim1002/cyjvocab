@@ -3,6 +3,7 @@ import { authOptions } from "@/lib/auth-options"
 import { redirect } from "next/navigation"
 import { prisma } from "@/lib/prisma"
 import { DataCleanupManagement } from "@/components/admin/data-cleanup-management"
+import { Campus } from "@prisma/client"
 
 export default async function DataCleanupPage() {
   try {
@@ -13,7 +14,7 @@ export default async function DataCleanupPage() {
       redirect("/admin")
     }
 
-    let campuses = []
+    let campuses: Campus[] = []
     try {
       campuses = await prisma.campus.findMany({
         orderBy: { name: "asc" },

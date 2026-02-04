@@ -2,6 +2,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth-options"
 import { LearningManagement } from "@/components/admin/learning-management"
 import { prisma } from "@/lib/prisma"
+import { LearningModule, Code, LearningItem } from "@prisma/client"
 
 export default async function LearningPage() {
   try {
@@ -11,8 +12,8 @@ export default async function LearningPage() {
       return null
     }
 
-    let modules = []
-    let codes = []
+    let modules: (LearningModule & { level: Code; grade: Code | null; items: LearningItem[] })[] = []
+    let codes: Code[] = []
     
     try {
       [modules, codes] = await Promise.all([
