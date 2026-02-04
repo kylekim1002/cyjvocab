@@ -66,12 +66,32 @@ export function StudentManagement({
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [editingStudent, setEditingStudent] = useState<Student | null>(null)
-  const [students, setStudents] = useState(initialStudents)
+  const [students, setStudents] = useState(initialStudents || [])
+  
+  // 서버에서 최신 데이터 가져오기
+  const refreshStudents = async () => {
+    try {
+      const response = await fetch("/api/admin/students")
+      if (response.ok) {
+        const latestStudents = await response.json()
+        setStudents(latestStudents)
+        setFilteredStudents(latestStudents)
+      }
+    } catch (error) {
+      console.error("Failed to refresh students:", error)
+    }
+  }
   
   // initialStudents가 변경되면 students state 업데이트
   useEffect(() => {
-    setStudents(initialStudents)
-    setFilteredStudents(initialStudents)
+    if (initialStudents && initialStudents.length > 0) {
+      setStudents(initialStudents)
+      setFilteredStudents(initialStudents)
+    } else {
+      // 데이터가 없으면 서버에서 가져오기
+      refreshStudents()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialStudents])
   
   const [formData, setFormData] = useState({

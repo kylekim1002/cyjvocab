@@ -19,37 +19,43 @@ export default async function ClassesPage() {
     try {
       [classes, campuses, codes] = await Promise.all([
         prisma.class.findMany({
-    where: { deletedAt: null },
-    include: {
-      campus: {
-        select: {
-          id: true,
-          name: true,
-        },
-      },
-      level: true,
-      grade: true,
-      teacher: true,
-    },
-    orderBy: { createdAt: "desc" },
+          where: { deletedAt: null },
+          include: {
+            campus: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+            level: true,
+            grade: true,
+            teacher: true,
+          },
+          orderBy: { createdAt: "desc" },
         }),
         prisma.campus.findMany({
-    include: {
-      teachers: {
-        orderBy: { name: "asc" },
-      },
-    },
-    orderBy: { name: "asc" },
+          include: {
+            teachers: {
+              orderBy: { name: "asc" },
+            },
+          },
+          orderBy: { name: "asc" },
         }),
         prisma.code.findMany({
-    orderBy: [
-      { category: "asc" },
-      { order: "asc" },
-    ],
+          orderBy: [
+            { category: "asc" },
+            { order: "asc" },
+          ],
         }),
       ])
+      console.log("Fetched classes data:", {
+        classes: classes.length,
+        campuses: campuses.length,
+        codes: codes.length,
+      })
     } catch (error) {
       console.error("Error fetching classes data:", error)
+      // 에러가 발생해도 빈 배열로 계속 진행 (컴포넌트에서 처리)
     }
 
     // ClassManagement 컴포넌트가 기대하는 타입으로 변환

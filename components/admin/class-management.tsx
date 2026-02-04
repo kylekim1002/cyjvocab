@@ -47,7 +47,28 @@ export function ClassManagement({
   codes,
 }: ClassManagementProps) {
   const { toast } = useToast()
-  const [classes, setClasses] = useState(initialClasses)
+  const [classes, setClasses] = useState(initialClasses || [])
+  
+  // 서버에서 최신 데이터 가져오기
+  const refreshClasses = async () => {
+    try {
+      const response = await fetch("/api/admin/classes")
+      if (response.ok) {
+        const latestClasses = await response.json()
+        setClasses(latestClasses)
+      }
+    } catch (error) {
+      console.error("Failed to refresh classes:", error)
+    }
+  }
+
+  // 컴포넌트 마운트 시 데이터가 없으면 서버에서 가져오기
+  useEffect(() => {
+    if (!initialClasses || initialClasses.length === 0) {
+      refreshClasses()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isStudentAssignDialogOpen, setIsStudentAssignDialogOpen] = useState(false)
   const [isLearningAssignDialogOpen, setIsLearningAssignDialogOpen] = useState(false)
