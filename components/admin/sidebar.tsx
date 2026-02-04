@@ -17,6 +17,7 @@ import {
   Trash2,
   LogOut,
   Home,
+  Database,
 } from "lucide-react"
 
 const menuItems = [
@@ -66,6 +67,12 @@ const menuItems = [
     title: "데이터 정리",
     href: "/admin/data-cleanup",
     icon: Trash2,
+    superAdminOnly: true,
+  },
+  {
+    title: "백업 및 복원",
+    href: "/admin/backup",
+    icon: Database,
     superAdminOnly: true,
   },
 ]
