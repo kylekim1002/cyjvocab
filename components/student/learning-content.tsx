@@ -518,6 +518,11 @@ export function LearningContent({
 
   // 단어목록/암기학습 완료 처리
   const handleWordlistMemorizeComplete = async () => {
+    // 이미 처리 중이면 무시
+    if (isLoading) {
+      return
+    }
+    
     setIsLoading(true)
     try {
       const mode = phase === "wordlist" ? "WORDLIST" : "MEMORIZE"
