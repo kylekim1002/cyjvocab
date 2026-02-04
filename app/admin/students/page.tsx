@@ -4,70 +4,90 @@ import { StudentManagement } from "@/components/admin/student-management"
 import { prisma } from "@/lib/prisma"
 
 export default async function StudentsPage() {
-  const session = await getServerSession(authOptions)
+  try {
+    const session = await getServerSession(authOptions)
 
-  if (!session || (session.user.role !== "SUPER_ADMIN" && session.user.role !== "MANAGER")) {
-    return null
-  }
+    if (!session || (session.user.role !== "SUPER_ADMIN" && session.user.role !== "MANAGER")) {
+      return null
+    }
 
-  const campuses = await prisma.campus.findMany({
-    orderBy: { name: "asc" },
-  })
+    let campuses = []
+    let gradeCodes = []
+    let levelCodes = []
+    let students = []
 
-  const gradeCodes = await prisma.code.findMany({
-    where: { category: "GRADE" },
-    orderBy: { order: "asc" },
-  })
+    try {
+      [campuses, gradeCodes, levelCodes, students] = await Promise.all([
+        prisma.campus.findMany({
+          orderBy: { name: "asc" },
+        }),
+        prisma.code.findMany({
+          where: { category: "GRADE" },
+          orderBy: { order: "asc" },
+        }),
+        prisma.code.findMany({
+          where: { category: "LEVEL" },
+          orderBy: { order: "asc" },
+        }),
+        prisma.student.findMany({
+          select: {
+            id: true,
+            name: true,
+            username: true,
+            plainPassword: true,
+            status: true,
+            school: true,
+            autoLoginToken: true,
+            createdAt: true,
+            campus: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+            grade: {
+              select: {
+                id: true,
+                value: true,
+              },
+            },
+            level: {
+              select: {
+                id: true,
+                value: true,
+              },
+            },
+          },
+          orderBy: { createdAt: "desc" },
+        }),
+      ])
+    } catch (error) {
+      console.error("Error fetching students data:", error)
+    }
 
-  const levelCodes = await prisma.code.findMany({
-    where: { category: "LEVEL" },
-    orderBy: { order: "asc" },
-  })
-
-  const students = await prisma.student.findMany({
-    select: {
-      id: true,
-      name: true,
-      username: true,
-      plainPassword: true,
-      status: true,
-      school: true,
-      autoLoginToken: true,
-      createdAt: true,
-      campus: {
-        select: {
-          id: true,
-          name: true,
-        },
-      },
-      grade: {
-        select: {
-          id: true,
-          value: true,
-        },
-      },
-      level: {
-        select: {
-          id: true,
-          value: true,
-        },
-      },
-    },
-    orderBy: { createdAt: "desc" },
-  })
-
-  return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">학생 관리</h1>
-        <p className="text-muted-foreground">학생을 등록하고 관리합니다.</p>
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold">학생 관리</h1>
+          <p className="text-muted-foreground">학생을 등록하고 관리합니다.</p>
+        </div>
+        <StudentManagement 
+          campuses={campuses} 
+          gradeCodes={gradeCodes}
+          levelCodes={levelCodes}
+          initialStudents={students}
+        />
       </div>
-      <StudentManagement 
-        campuses={campuses} 
-        gradeCodes={gradeCodes}
-        levelCodes={levelCodes}
-        initialStudents={students}
-      />
-    </div>
-  )
+    )
+  } catch (error) {
+    console.error("Students page error:", error)
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold">학생 관리</h1>
+          <p className="text-muted-foreground text-red-500">데이터를 불러오는 중 오류가 발생했습니다.</p>
+        </div>
+      </div>
+    )
+  }
 }

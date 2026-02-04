@@ -4,35 +4,55 @@ import { LearningManagement } from "@/components/admin/learning-management"
 import { prisma } from "@/lib/prisma"
 
 export default async function LearningPage() {
-  const session = await getServerSession(authOptions)
+  try {
+    const session = await getServerSession(authOptions)
 
-  if (!session || (session.user.role !== "SUPER_ADMIN" && session.user.role !== "MANAGER")) {
-    return null
-  }
+    if (!session || (session.user.role !== "SUPER_ADMIN" && session.user.role !== "MANAGER")) {
+      return null
+    }
 
-  const modules = await prisma.learningModule.findMany({
-    include: {
-      level: true,
-      grade: true,
-      items: true,
-    },
-    orderBy: { createdAt: "desc" },
-  })
+    let modules = []
+    let codes = []
+    
+    try {
+      [modules, codes] = await Promise.all([
+        prisma.learningModule.findMany({
+          include: {
+            level: true,
+            grade: true,
+            items: true,
+          },
+          orderBy: { createdAt: "desc" },
+        }),
+        prisma.code.findMany({
+          orderBy: [
+            { category: "asc" },
+            { order: "asc" },
+          ],
+        }),
+      ])
+    } catch (error) {
+      console.error("Error fetching learning data:", error)
+    }
 
-  const codes = await prisma.code.findMany({
-    orderBy: [
-      { category: "asc" },
-      { order: "asc" },
-    ],
-  })
-
-  return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">학습 관리</h1>
-        <p className="text-muted-foreground">학습 콘텐츠를 등록하고 관리합니다.</p>
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold">학습 관리</h1>
+          <p className="text-muted-foreground">학습 콘텐츠를 등록하고 관리합니다.</p>
+        </div>
+        <LearningManagement initialModules={modules} codes={codes} />
       </div>
-      <LearningManagement initialModules={modules} codes={codes} />
-    </div>
-  )
+    )
+  } catch (error) {
+    console.error("Learning page error:", error)
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold">학습 관리</h1>
+          <p className="text-muted-foreground text-red-500">데이터를 불러오는 중 오류가 발생했습니다.</p>
+        </div>
+      </div>
+    )
+  }
 }
