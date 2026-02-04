@@ -49,35 +49,48 @@ export function ClassManagement({
   const { toast } = useToast()
   const [classes, setClasses] = useState(initialClasses || [])
   
-  // 서버에서 최신 데이터 가져오기
+  // 서버에서 최신 데이터 가져오기 (성공하고 데이터가 있을 때만 업데이트)
   const refreshClasses = async () => {
     try {
       const response = await fetch("/api/admin/classes")
       if (response.ok) {
         const latestClasses = await response.json()
-        // API 응답을 컴포넌트가 기대하는 형식으로 변환
-        const transformedClasses = latestClasses.map((cls: any) => ({
-          id: cls.id,
-          name: cls.name,
-          createdAt: cls.createdAt,
-          campus: cls.campus || { id: "", name: "" },
-          level: cls.level || { value: "" },
-          grade: cls.grade || { value: "" },
-          teacher: cls.teacher || { name: "" },
-        }))
-        setClasses(transformedClasses)
-        console.log("Refreshed classes:", transformedClasses.length)
+        if (Array.isArray(latestClasses) && latestClasses.length > 0) {
+          // API 응답을 컴포넌트가 기대하는 형식으로 변환
+          const transformedClasses = latestClasses.map((cls: any) => ({
+            id: cls.id,
+            name: cls.name,
+            createdAt: cls.createdAt,
+            campus: cls.campus || { id: "", name: "" },
+            level: cls.level || { value: "" },
+            grade: cls.grade || { value: "" },
+            teacher: cls.teacher || { name: "" },
+          }))
+          setClasses(transformedClasses)
+          console.log("Refreshed classes:", transformedClasses.length)
+        } else {
+          console.log("API returned empty array, keeping existing data")
+          // 빈 배열이면 기존 데이터 유지
+        }
       } else {
         console.error("Failed to refresh classes: HTTP", response.status)
+        // 실패해도 기존 데이터 유지
       }
     } catch (error) {
       console.error("Failed to refresh classes:", error)
+      // 에러 발생해도 기존 데이터 유지
     }
   }
 
-  // 컴포넌트 마운트 시 항상 서버에서 최신 데이터 가져오기
+  // initialClasses가 있으면 우선 사용, 없을 때만 API 호출
   useEffect(() => {
-    refreshClasses()
+    if (!initialClasses || initialClasses.length === 0) {
+      console.log("No initial classes, fetching from API")
+      refreshClasses()
+    } else {
+      console.log("Using initial classes:", initialClasses.length)
+      setClasses(initialClasses)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   const [isDialogOpen, setIsDialogOpen] = useState(false)

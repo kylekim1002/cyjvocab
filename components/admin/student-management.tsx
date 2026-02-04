@@ -68,45 +68,51 @@ export function StudentManagement({
   const [editingStudent, setEditingStudent] = useState<Student | null>(null)
   const [students, setStudents] = useState(initialStudents || [])
   
-  // 서버에서 최신 데이터 가져오기
+  // 서버에서 최신 데이터 가져오기 (성공하고 데이터가 있을 때만 업데이트)
   const refreshStudents = async () => {
     try {
       const response = await fetch("/api/admin/students")
       if (response.ok) {
         const latestStudents = await response.json()
-        // API 응답을 컴포넌트가 기대하는 형식으로 변환
-        const transformedStudents = latestStudents.map((student: any) => ({
-          ...student,
-          campus: student.campus || { id: "", name: "" },
-          grade: student.grade || null,
-          level: student.level || null,
-        }))
-        setStudents(transformedStudents)
-        setFilteredStudents(transformedStudents)
-        console.log("Refreshed students:", transformedStudents.length)
+        if (Array.isArray(latestStudents) && latestStudents.length > 0) {
+          // API 응답을 컴포넌트가 기대하는 형식으로 변환
+          const transformedStudents = latestStudents.map((student: any) => ({
+            ...student,
+            campus: student.campus || { id: "", name: "" },
+            grade: student.grade || null,
+            level: student.level || null,
+          }))
+          setStudents(transformedStudents)
+          setFilteredStudents(transformedStudents)
+          console.log("Refreshed students:", transformedStudents.length)
+        } else {
+          console.log("API returned empty array, keeping existing data")
+          // 빈 배열이면 기존 데이터 유지
+        }
       } else {
         console.error("Failed to refresh students: HTTP", response.status)
         const errorText = await response.text()
         console.error("Error response:", errorText)
+        // 실패해도 기존 데이터 유지
       }
     } catch (error) {
       console.error("Failed to refresh students:", error)
+      // 에러 발생해도 기존 데이터 유지
     }
   }
   
-  // 컴포넌트 마운트 시 항상 서버에서 최신 데이터 가져오기
+  // initialStudents가 있으면 우선 사용, 없을 때만 API 호출
   useEffect(() => {
-    refreshStudents()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-  
-  // initialStudents가 변경되면 students state 업데이트 (서버 사이드 데이터가 있으면 사용)
-  useEffect(() => {
-    if (initialStudents && initialStudents.length > 0) {
+    if (!initialStudents || initialStudents.length === 0) {
+      console.log("No initial students, fetching from API")
+      refreshStudents()
+    } else {
+      console.log("Using initial students:", initialStudents.length)
       setStudents(initialStudents)
       setFilteredStudents(initialStudents)
     }
-  }, [initialStudents])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   
   const [formData, setFormData] = useState({
     campusId: "",

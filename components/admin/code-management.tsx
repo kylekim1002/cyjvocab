@@ -26,12 +26,6 @@ interface CodeManagementProps {
 export function CodeManagement({ initialCodes }: CodeManagementProps) {
   const { toast } = useToast()
   const [codes, setCodes] = useState(initialCodes || [])
-  
-  // 컴포넌트 마운트 시 항상 서버에서 최신 데이터 가져오기
-  useEffect(() => {
-    refreshCodes()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
   const [newCategory, setNewCategory] = useState<CodeCategory>("GRADE")
   const [newValue, setNewValue] = useState("")
   const [newOrder, setNewOrder] = useState(0)
@@ -40,15 +34,18 @@ export function CodeManagement({ initialCodes }: CodeManagementProps) {
   const [editOrder, setEditOrder] = useState(0)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
 
-  // 서버에서 최신 데이터 가져오기
+  // 서버에서 최신 데이터 가져오기 (성공하고 데이터가 있을 때만 업데이트)
   const refreshCodes = async () => {
     try {
       const response = await fetch("/api/admin/codes")
       if (response.ok) {
         const latestCodes = await response.json()
-        if (Array.isArray(latestCodes)) {
+        if (Array.isArray(latestCodes) && latestCodes.length > 0) {
           setCodes(latestCodes)
           console.log("Refreshed codes:", latestCodes.length)
+        } else {
+          console.log("API returned empty array, keeping existing data")
+          // 빈 배열이면 기존 데이터 유지
         }
       } else {
         console.error("Failed to refresh codes: HTTP", response.status)
@@ -59,6 +56,18 @@ export function CodeManagement({ initialCodes }: CodeManagementProps) {
       // 에러 발생해도 기존 상태 유지
     }
   }
+
+  // initialCodes가 있으면 우선 사용, 없을 때만 API 호출
+  useEffect(() => {
+    if (!initialCodes || initialCodes.length === 0) {
+      console.log("No initial codes, fetching from API")
+      refreshCodes()
+    } else {
+      console.log("Using initial codes:", initialCodes.length)
+      setCodes(initialCodes)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const handleEdit = (code: Code) => {
     setEditingCode(code)

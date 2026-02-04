@@ -52,7 +52,7 @@ export function LearningManagement({
   codes,
 }: LearningManagementProps) {
   const { toast } = useToast()
-  const [modules, setModules] = useState(initialModules)
+  const [modules, setModules] = useState(initialModules || [])
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [editingModule, setEditingModule] = useState<LearningModule | null>(null)
@@ -77,22 +77,38 @@ export function LearningManagement({
   const levelCodes = codes.filter((c) => c.category === "LEVEL")
   const gradeCodes = codes.filter((c) => c.category === "GRADE")
 
-  // 서버에서 최신 데이터 가져오기
+  // 서버에서 최신 데이터 가져오기 (성공하고 데이터가 있을 때만 업데이트)
   const refreshModules = async () => {
     try {
       const response = await fetch("/api/admin/learning-modules")
       if (response.ok) {
         const latestModules = await response.json()
-        setModules(latestModules)
+        if (Array.isArray(latestModules) && latestModules.length > 0) {
+          setModules(latestModules)
+          console.log("Refreshed modules:", latestModules.length)
+        } else {
+          console.log("API returned empty array, keeping existing data")
+          // 빈 배열이면 기존 데이터 유지
+        }
+      } else {
+        console.error("Failed to refresh modules: HTTP", response.status)
+        // 실패해도 기존 데이터 유지
       }
     } catch (error) {
       console.error("Failed to refresh modules:", error)
+      // 에러 발생해도 기존 데이터 유지
     }
   }
 
-  // 컴포넌트 마운트 시 항상 서버에서 최신 데이터 가져오기
+  // initialModules가 있으면 우선 사용, 없을 때만 API 호출
   useEffect(() => {
-    refreshModules()
+    if (!initialModules || initialModules.length === 0) {
+      console.log("No initial modules, fetching from API")
+      refreshModules()
+    } else {
+      console.log("Using initial modules:", initialModules.length)
+      setModules(initialModules)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 

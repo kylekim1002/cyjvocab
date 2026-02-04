@@ -28,12 +28,6 @@ interface CampusManagementProps {
 export function CampusManagement({ initialCampuses }: CampusManagementProps) {
   const { toast } = useToast()
   const [campuses, setCampuses] = useState(initialCampuses || [])
-  
-  // 컴포넌트 마운트 시 항상 서버에서 최신 데이터 가져오기
-  useEffect(() => {
-    refreshCampuses()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
   const [newCampusName, setNewCampusName] = useState("")
   const [selectedCampus, setSelectedCampus] = useState<string | null>(null)
   const [newTeacherName, setNewTeacherName] = useState("")
@@ -42,18 +36,40 @@ export function CampusManagement({ initialCampuses }: CampusManagementProps) {
   const [editTeacherName, setEditTeacherName] = useState("")
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
 
-  // 서버에서 최신 데이터 가져오기
+  // 서버에서 최신 데이터 가져오기 (성공하고 데이터가 있을 때만 업데이트)
   const refreshCampuses = async () => {
     try {
       const response = await fetch("/api/admin/campus")
       if (response.ok) {
         const latestCampuses = await response.json()
-        setCampuses(latestCampuses)
+        if (Array.isArray(latestCampuses) && latestCampuses.length > 0) {
+          setCampuses(latestCampuses)
+          console.log("Refreshed campuses:", latestCampuses.length)
+        } else {
+          console.log("API returned empty array, keeping existing data")
+          // 빈 배열이면 기존 데이터 유지
+        }
+      } else {
+        console.error("Failed to refresh campuses: HTTP", response.status)
+        // 실패해도 기존 데이터 유지
       }
     } catch (error) {
       console.error("Failed to refresh campuses:", error)
+      // 에러 발생해도 기존 데이터 유지
     }
   }
+
+  // initialCampuses가 있으면 우선 사용, 없을 때만 API 호출
+  useEffect(() => {
+    if (!initialCampuses || initialCampuses.length === 0) {
+      console.log("No initial campuses, fetching from API")
+      refreshCampuses()
+    } else {
+      console.log("Using initial campuses:", initialCampuses.length)
+      setCampuses(initialCampuses)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const handleAddCampus = async () => {
     if (!newCampusName.trim()) {
