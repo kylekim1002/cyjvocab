@@ -66,8 +66,8 @@ export async function POST(request: Request) {
         await tx.campus.deleteMany({})
         await tx.code.deleteMany({})
 
-      // 2. 데이터 복원 (외래키 관계 순서)
-      if (data.codes && Array.isArray(data.codes)) {
+        // 2. 데이터 복원 (외래키 관계 순서)
+        if (data.codes && Array.isArray(data.codes)) {
         for (const code of data.codes) {
           await tx.code.create({
             data: {
@@ -82,8 +82,8 @@ export async function POST(request: Request) {
         }
       }
 
-      if (data.campuses && Array.isArray(data.campuses)) {
-        for (const campus of data.campuses) {
+        if (data.campuses && Array.isArray(data.campuses)) {
+          for (const campus of data.campuses) {
           await tx.campus.create({
             data: {
               id: campus.id,
@@ -92,11 +92,11 @@ export async function POST(request: Request) {
               updatedAt: new Date(campus.updatedAt),
             },
           })
+          }
         }
-      }
 
-      if (data.teachers && Array.isArray(data.teachers)) {
-        for (const teacher of data.teachers) {
+        if (data.teachers && Array.isArray(data.teachers)) {
+          for (const teacher of data.teachers) {
           await tx.teacher.create({
             data: {
               id: teacher.id,
@@ -106,11 +106,11 @@ export async function POST(request: Request) {
               updatedAt: new Date(teacher.updatedAt),
             },
           })
+          }
         }
-      }
 
-      if (data.users && Array.isArray(data.users)) {
-        for (const user of data.users) {
+        if (data.users && Array.isArray(data.users)) {
+          for (const user of data.users) {
           await tx.user.create({
             data: {
               id: user.id,
@@ -124,11 +124,11 @@ export async function POST(request: Request) {
               updatedAt: new Date(user.updatedAt),
             },
           })
+          }
         }
-      }
 
-      if (data.classes && Array.isArray(data.classes)) {
-        for (const cls of data.classes) {
+        if (data.classes && Array.isArray(data.classes)) {
+          for (const cls of data.classes) {
           await tx.class.create({
             data: {
               id: cls.id,
@@ -142,11 +142,11 @@ export async function POST(request: Request) {
               deletedAt: cls.deletedAt ? new Date(cls.deletedAt) : null,
             },
           })
+          }
         }
-      }
 
-      if (data.students && Array.isArray(data.students)) {
-        for (const student of data.students) {
+        if (data.students && Array.isArray(data.students)) {
+          for (const student of data.students) {
           await tx.student.create({
             data: {
               id: student.id,
@@ -167,11 +167,11 @@ export async function POST(request: Request) {
               updatedAt: new Date(student.updatedAt),
             },
           })
+          }
         }
-      }
 
-      if (data.studentClasses && Array.isArray(data.studentClasses)) {
-        for (const sc of data.studentClasses) {
+        if (data.studentClasses && Array.isArray(data.studentClasses)) {
+          for (const sc of data.studentClasses) {
           await tx.studentClass.create({
             data: {
               id: sc.id,
@@ -182,11 +182,11 @@ export async function POST(request: Request) {
               createdAt: new Date(sc.createdAt),
             },
           })
+          }
         }
-      }
 
-      if (data.learningModules && Array.isArray(data.learningModules)) {
-        for (const module of data.learningModules) {
+        if (data.learningModules && Array.isArray(data.learningModules)) {
+          for (const module of data.learningModules) {
           await tx.learningModule.create({
             data: {
               id: module.id,
@@ -199,11 +199,11 @@ export async function POST(request: Request) {
               updatedAt: new Date(module.updatedAt),
             },
           })
+          }
         }
-      }
 
-      if (data.learningItems && Array.isArray(data.learningItems)) {
-        for (const item of data.learningItems) {
+        if (data.learningItems && Array.isArray(data.learningItems)) {
+          for (const item of data.learningItems) {
           await tx.learningItem.create({
             data: {
               id: item.id,
@@ -214,11 +214,11 @@ export async function POST(request: Request) {
               updatedAt: new Date(item.updatedAt),
             },
           })
+          }
         }
-      }
 
-      if (data.classAssignments && Array.isArray(data.classAssignments)) {
-        for (const assignment of data.classAssignments) {
+        if (data.classAssignments && Array.isArray(data.classAssignments)) {
+          for (const assignment of data.classAssignments) {
           await tx.classAssignment.create({
             data: {
               id: assignment.id,
@@ -228,14 +228,14 @@ export async function POST(request: Request) {
               updatedAt: new Date(assignment.updatedAt),
             },
           })
+          }
         }
-      }
 
-      if (
-        data.classAssignmentModules &&
-        Array.isArray(data.classAssignmentModules)
-      ) {
-        for (const cam of data.classAssignmentModules) {
+        if (
+          data.classAssignmentModules &&
+          Array.isArray(data.classAssignmentModules)
+        ) {
+          for (const cam of data.classAssignmentModules) {
           await tx.classAssignmentModule.create({
             data: {
               id: cam.id,
@@ -245,11 +245,11 @@ export async function POST(request: Request) {
               createdAt: new Date(cam.createdAt),
             },
           })
+          }
         }
-      }
 
-      if (data.studySessions && Array.isArray(data.studySessions)) {
-        for (const session of data.studySessions) {
+        if (data.studySessions && Array.isArray(data.studySessions)) {
+          for (const session of data.studySessions) {
           await tx.studySession.create({
             data: {
               id: session.id,
@@ -266,14 +266,14 @@ export async function POST(request: Request) {
                 : null,
             },
           })
+          }
         }
-      }
 
-      if (
-        data.studentAssignmentProgress &&
-        Array.isArray(data.studentAssignmentProgress)
-      ) {
-        for (const progress of data.studentAssignmentProgress) {
+        if (
+          data.studentAssignmentProgress &&
+          Array.isArray(data.studentAssignmentProgress)
+        ) {
+          for (const progress of data.studentAssignmentProgress) {
           await tx.studentAssignmentProgress.create({
             data: {
               id: progress.id,
@@ -293,11 +293,11 @@ export async function POST(request: Request) {
               memorizeProgressPct: progress.memorizeProgressPct,
             },
           })
+          }
         }
-      }
 
-      if (data.scoreLogs && Array.isArray(data.scoreLogs)) {
-        for (const log of data.scoreLogs) {
+        if (data.scoreLogs && Array.isArray(data.scoreLogs)) {
+          for (const log of data.scoreLogs) {
           await tx.scoreLog.create({
             data: {
               id: log.id,
@@ -309,11 +309,11 @@ export async function POST(request: Request) {
               createdAt: new Date(log.createdAt),
             },
           })
+          }
         }
-      }
 
-      if (data.scoreDailies && Array.isArray(data.scoreDailies)) {
-        for (const daily of data.scoreDailies) {
+        if (data.scoreDailies && Array.isArray(data.scoreDailies)) {
+          for (const daily of data.scoreDailies) {
           await tx.scoreDaily.create({
             data: {
               id: daily.id,
@@ -327,11 +327,11 @@ export async function POST(request: Request) {
               updatedAt: new Date(daily.updatedAt),
             },
           })
+          }
         }
-      }
 
-      if (data.wrongAnswers && Array.isArray(data.wrongAnswers)) {
-        for (const wrong of data.wrongAnswers) {
+        if (data.wrongAnswers && Array.isArray(data.wrongAnswers)) {
+          for (const wrong of data.wrongAnswers) {
           await tx.wrongAnswer.create({
             data: {
               id: wrong.id,
@@ -344,14 +344,14 @@ export async function POST(request: Request) {
               createdAt: new Date(wrong.createdAt),
             },
           })
+          }
         }
-      }
 
-      if (
-        data.studentLearningAttempts &&
-        Array.isArray(data.studentLearningAttempts)
-      ) {
-        for (const attempt of data.studentLearningAttempts) {
+        if (
+          data.studentLearningAttempts &&
+          Array.isArray(data.studentLearningAttempts)
+        ) {
+          for (const attempt of data.studentLearningAttempts) {
           await tx.studentLearningAttempt.create({
             data: {
               id: attempt.id,
@@ -369,6 +369,7 @@ export async function POST(request: Request) {
               updatedAt: new Date(attempt.updatedAt),
             },
           })
+          }
         }
       },
       {
