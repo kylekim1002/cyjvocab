@@ -120,17 +120,16 @@ export function StudentManagement({
     gradeId: "",
     levelId: "",
     username: "",
-    password: "",
     school: "",
     status: "ACTIVE" as "ACTIVE" | "INACTIVE",
   })
   const [editFormData, setEditFormData] = useState({
     name: "",
+    username: "",
     gradeId: "",
     levelId: "",
     school: "",
     status: "ACTIVE" as "ACTIVE" | "INACTIVE",
-    password: "",
   })
   
   // 필터링 상태
@@ -139,6 +138,7 @@ export function StudentManagement({
   const [filterValue, setFilterValue] = useState<string>("")
   const [filterCodeId, setFilterCodeId] = useState<string>("") // 학년/레벨 코드 ID
   const [filteredStudents, setFilteredStudents] = useState(initialStudents)
+  const [isTogglingStatus, setIsTogglingStatus] = useState<Record<string, boolean>>({})
   const [autoLoginToken, setAutoLoginToken] = useState<string | null>(null)
   const [autoLoginUrl, setAutoLoginUrl] = useState<string | null>(null)
 
@@ -204,8 +204,8 @@ export function StudentManagement({
         campus: "강남캠퍼스",
         name: "홍길동",
         grade: "1학년",
-        username: "student1",
-        password: "password123",
+        level: "Wind1",
+        "숫자4자리": "1234",
         school: "예시초등학교",
       },
     ]
@@ -216,8 +216,71 @@ export function StudentManagement({
     XLSX.writeFile(wb, "학생_등록_템플릿.xlsx")
   }
 
+  const handleToggleStudentStatus = async (student: Student, nextStatus: "ACTIVE" | "INACTIVE") => {
+    const key = student.id
+    if (!key) return
+    if (isTogglingStatus[key]) return
+
+    setIsTogglingStatus((prev) => ({ ...prev, [key]: true }))
+
+    // Optimistic UI
+    const optimistic = (arr: Student[]) =>
+      arr.map((s) => (s.id === key ? { ...s, status: nextStatus } : s))
+
+    setStudents((prev) => optimistic(prev))
+    setFilteredStudents((prev) => optimistic(prev))
+
+    try {
+      const response = await fetch(`/api/admin/students/${student.username}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          status: nextStatus,
+          studentId: student.id,
+          name: student.name,
+          username: student.username,
+        }),
+      })
+
+      if (!response.ok) {
+        const contentType = response.headers.get("content-type")
+        if (contentType && contentType.includes("application/json")) {
+          const data = await response.json()
+          throw new Error(data.error || "상태 변경 실패")
+        }
+        const text = await response.text()
+        throw new Error(text || "상태 변경 실패")
+      }
+
+      toast({
+        title: "성공",
+        description: `${student.name} 상태가 ${nextStatus === "ACTIVE" ? "활성" : "비활성"}로 변경되었습니다.`,
+      })
+
+      // 데이터 구조가 바뀌지 않으므로 보통 optimistic만으로 충분하지만,
+      // 간혹 새로고침이 필요할 수 있어 refresh를 한번 트리거합니다.
+      router.refresh()
+    } catch (error: any) {
+      // Revert
+      setStudents((prev) =>
+        optimistic(prev).map((s) => (s.id === key ? { ...s, status: student.status } : s))
+      )
+      setFilteredStudents((prev) =>
+        optimistic(prev).map((s) => (s.id === key ? { ...s, status: student.status } : s))
+      )
+
+      toast({
+        title: "오류",
+        description: error?.message || "상태 변경에 실패했습니다.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsTogglingStatus((prev) => ({ ...prev, [key]: false }))
+    }
+  }
+
   const handleAddStudent = async () => {
-    if (!formData.campusId || !formData.name || !formData.gradeId || !formData.username || !formData.password) {
+    if (!formData.campusId || !formData.name || !formData.gradeId || !formData.username) {
       toast({
         title: "오류",
         description: "필수 필드를 모두 입력해주세요.",
@@ -269,7 +332,6 @@ export function StudentManagement({
         gradeId: formData.gradeId.trim(),
         levelId: formData.levelId?.trim() || null,
         username: formData.username.trim(),
-        password: formData.password,
         school: formData.school?.trim() || null,
         status: formData.status,
       }
@@ -371,7 +433,6 @@ export function StudentManagement({
       gradeId: "",
       levelId: "",
       username: "",
-      password: "",
       school: "",
       status: "ACTIVE",
     })
@@ -436,11 +497,11 @@ export function StudentManagement({
     setEditingStudent(student)
     setEditFormData({
       name: student.name,
+      username: student.username,
       gradeId: student.grade?.id || "",
       levelId: student.level?.id || "none",
       school: student.school || "",
       status: student.status,
-      password: "",
     })
     setIsEditDialogOpen(true)
   }
@@ -470,21 +531,17 @@ export function StudentManagement({
     try {
       const payload: any = {
         name: editFormData.name.trim(),
+        username: editFormData.username.trim(),
         gradeId: editFormData.gradeId.trim(),
         levelId: editFormData.levelId && editFormData.levelId !== "none" ? editFormData.levelId.trim() : null,
         school: editFormData.school?.trim() || null,
         status: editFormData.status,
       }
 
-      // 비밀번호가 입력된 경우에만 포함
-      if (editFormData.password.trim()) {
-        payload.password = editFormData.password.trim()
-      }
-
       const response = await fetch(`/api/admin/students/${editingStudent.username}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ ...payload, studentId: editingStudent.id }),
       })
 
       if (!response.ok) {
@@ -522,11 +579,11 @@ export function StudentManagement({
     setEditingStudent(null)
     setEditFormData({
       name: "",
+      username: "",
       gradeId: "",
       levelId: "",
       school: "",
       status: "ACTIVE",
-      password: "",
     })
   }
 
@@ -639,20 +696,12 @@ export function StudentManagement({
                 </Select>
               </div>
               <div>
-                <Label>아이디 *</Label>
+                <Label>숫자4자리 *</Label>
                 <Input
                   value={formData.username}
                   onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-                  placeholder="로그인 아이디"
-                />
-              </div>
-              <div>
-                <Label>비밀번호 *</Label>
-                <Input
-                  type="password"
-                  value={formData.password}
-                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  placeholder="비밀번호"
+                  placeholder="로그인 숫자4자리 (예: 1234)"
+                  inputMode="numeric"
                 />
               </div>
               <div>
@@ -716,7 +765,7 @@ export function StudentManagement({
           <div>
             <Label>엑셀 파일 업로드</Label>
             <p className="text-sm text-muted-foreground mb-2">
-              컬럼 순서: campus, name, grade, username, password, school(optional)
+              컬럼 순서: campus, name, grade, level(optional), 숫자4자리, school(optional)
             </p>
             <div className="flex gap-2">
               <Input
@@ -855,8 +904,7 @@ export function StudentManagement({
               <TableHeader>
                 <TableRow>
                   <TableHead>이름</TableHead>
-                  <TableHead>아이디</TableHead>
-                  <TableHead>비밀번호</TableHead>
+                  <TableHead>숫자4자리</TableHead>
                   <TableHead>캠퍼스</TableHead>
                   <TableHead>학년</TableHead>
                   <TableHead>레벨</TableHead>
@@ -870,7 +918,7 @@ export function StudentManagement({
               <TableBody>
                 {filteredStudents.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={11} className="text-center text-muted-foreground">
+                    <TableCell colSpan={10} className="text-center text-muted-foreground">
                       {students.length === 0
                         ? "등록된 학생이 없습니다."
                         : "조건에 맞는 학생이 없습니다."}
@@ -881,21 +929,34 @@ export function StudentManagement({
                     <TableRow key={student.id}>
                       <TableCell className="font-medium">{student.name}</TableCell>
                       <TableCell>{student.username}</TableCell>
-                      <TableCell>{student.plainPassword || "-"}</TableCell>
                       <TableCell>{student.campus.name}</TableCell>
                       <TableCell>{student.grade?.value || "-"}</TableCell>
                       <TableCell>{student.level?.value || "-"}</TableCell>
                       <TableCell>{student.school || "-"}</TableCell>
                       <TableCell>
-                        <span
-                          className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${
-                            student.status === "ACTIVE"
-                              ? "bg-green-100 text-green-800"
-                              : "bg-gray-100 text-gray-800"
-                          }`}
-                        >
-                          {student.status === "ACTIVE" ? "활성" : "비활성"}
-                        </span>
+                        <div className="flex items-center gap-3">
+                          <span
+                            className={`text-xs font-medium ${
+                              student.status === "INACTIVE" ? "text-gray-900" : "text-gray-400"
+                            }`}
+                          >
+                            OFF
+                          </span>
+                          <Switch
+                            checked={student.status === "ACTIVE"}
+                            disabled={!!isTogglingStatus[student.id]}
+                            onCheckedChange={(checked) => {
+                              handleToggleStudentStatus(student, checked ? "ACTIVE" : "INACTIVE")
+                            }}
+                          />
+                          <span
+                            className={`text-xs font-medium ${
+                              student.status === "ACTIVE" ? "text-green-700" : "text-gray-400"
+                            }`}
+                          >
+                            ON
+                          </span>
+                        </div>
                       </TableCell>
                       <TableCell>
                         {student.autoLoginToken ? (
@@ -915,7 +976,11 @@ export function StudentManagement({
                                 try {
                                   const response = await fetch(
                                     `/api/admin/students/${student.username}/auto-login-token`,
-                                    { method: "POST" }
+                                    {
+                                      method: "POST",
+                                      headers: { "Content-Type": "application/json" },
+                                      body: JSON.stringify({ studentId: student.id }),
+                                    }
                                   )
                                   if (response.ok) {
                                     toast({
@@ -968,7 +1033,7 @@ export function StudentManagement({
           <DialogHeader>
             <DialogTitle>학생 정보 수정</DialogTitle>
             <DialogDescription>
-              학생 정보를 수정합니다. (캠퍼스와 아이디는 변경할 수 없습니다.)
+              학생 정보를 수정합니다. (캠퍼스는 변경할 수 없습니다.)
             </DialogDescription>
           </DialogHeader>
           {editingStudent && (
@@ -982,10 +1047,12 @@ export function StudentManagement({
                 />
               </div>
               <div>
-                <Label>아이디</Label>
+                <Label>숫자4자리</Label>
                 <Input
-                  value={editingStudent.username}
-                  disabled
+                  value={editFormData.username}
+                  onChange={(e) => setEditFormData({ ...editFormData, username: e.target.value })}
+                  inputMode="numeric"
+                  placeholder="숫자4자리 (예: 1234)"
                   className="bg-gray-100"
                 />
               </div>
@@ -1043,13 +1110,8 @@ export function StudentManagement({
                 />
               </div>
               <div>
-                <Label>비밀번호 (변경 시에만 입력)</Label>
-                <Input
-                  type="password"
-                  value={editFormData.password}
-                  onChange={(e) => setEditFormData({ ...editFormData, password: e.target.value })}
-                  placeholder="비밀번호를 변경하려면 입력하세요"
-                />
+                <Label>로그인 방식</Label>
+                <Input value="이름 + 숫자4자리로 로그인 (비밀번호 없음)" disabled className="bg-gray-100" />
               </div>
               <div className="flex items-center gap-2">
                 <Switch

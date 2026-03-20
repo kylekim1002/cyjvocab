@@ -134,7 +134,7 @@ model Class {
 model Student {
   id                String          @id @default(cuid())
   name              String
-  username          String          @unique
+  username          String
   password          String
   plainPassword     String?         // 관리자용 평문 비밀번호 (보안 주의)
   status            StudentStatus   @default(ACTIVE)

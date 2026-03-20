@@ -67,11 +67,19 @@ export function LearningContent({
   const [showAnswerRequired, setShowAnswerRequired] = useState<boolean>(false) // 답 선택 필수 경고
   const [isCompleting, setIsCompleting] = useState<boolean>(false) // 완료 처리 중 플래그 (중복 클릭 방지)
 
+  const [showRestartConfirm, setShowRestartConfirm] = useState(false)
+
+  // 쓰기학습용 상태 (스펠링 입력 + 하트 3개)
+  const [writingInput, setWritingInput] = useState<string>("")
+  const [writingHearts, setWritingHearts] = useState<number>(3)
+  const [writingWrongCount, setWritingWrongCount] = useState<number>(0)
+  const [writingShowAnswer, setWritingShowAnswer] = useState<boolean>(false)
+
   useEffect(() => {
     console.log("LearningContent useEffect", { inProgressSession, progress, sessionId, isReviewMode, completedSession, phase })
     
     // 단어목록/암기학습은 항상 처음부터 시작
-    if (phase === "wordlist" || phase === "memorization") {
+    if (phase === "wordlist" || phase === "memorization" || phase === "writing") {
       setCurrentIndex(0)
       // 단어목록/암기학습은 세션 없이도 작동
       return
@@ -146,6 +154,15 @@ export function LearningContent({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inProgressSession, progress, isReviewMode, completedSession, phase])
+
+  // 쓰기학습은 문제(현재 index)가 바뀔 때마다 하트/입력 초기화
+  useEffect(() => {
+    if (phase !== "writing") return
+    setWritingInput("")
+    setWritingHearts(3)
+    setWritingWrongCount(0)
+    setWritingShowAnswer(false)
+  }, [phase, currentIndex, module.id])
 
   const startNewSession = async () => {
     setIsLoading(true)
@@ -524,7 +541,9 @@ export function LearningContent({
     }
     
     setIsLoading(true)
+    let keepLoadingOnSuccess = false
     try {
+      // 쓰기학습은 진행률 저장을 MEMORIZE로 매핑
       const mode = phase === "wordlist" ? "WORDLIST" : "MEMORIZE"
       const sortedItems = [...module.items].sort((a, b) => a.order - b.order)
       // 마지막 인덱스로 진행률 업데이트 (100%)
@@ -552,14 +571,18 @@ export function LearningContent({
       
       toast({
         title: "완료",
-        description: `${phase === "wordlist" ? "단어목록" : "암기학습"}이 완료되었습니다.`,
+        description: `${
+          phase === "wordlist"
+            ? "단어학습"
+            : phase === "writing"
+            ? "쓰기학습"
+            : "플래시카드"
+        }이 완료되었습니다.`,
       })
-      
-      // 페이지 새로고침 후 이동
-      router.refresh()
-      setTimeout(() => {
-        router.push("/student")
-      }, 500)
+
+      // 성공 시에는 로딩 상태를 유지한 채 즉시 캘린더(학생 홈)로 이동
+      keepLoadingOnSuccess = true
+      router.push("/student")
     } catch (error: any) {
       console.error("Complete error:", error)
       toast({
@@ -568,7 +591,9 @@ export function LearningContent({
         variant: "destructive",
       })
     } finally {
-      setIsLoading(false)
+      if (!keepLoadingOnSuccess) {
+        setIsLoading(false)
+      }
     }
   }
 
@@ -602,6 +627,73 @@ export function LearningContent({
     if (!item.payloadJson) return ""
     const correctIndex = item.payloadJson.correct_index || 0
     return item.payloadJson[`choice${correctIndex + 1}`] || ""
+  }
+
+  // 쓰기학습에서 입력/정답으로 사용할 단어(스펠링)
+  const getExpectedSpelling = (item: LearningItem) => {
+    const pj = item.payloadJson || {}
+    return String(
+      pj.word_text ?? pj.wordText ?? pj.word ?? pj.spelling ?? ""
+    ).trim()
+  }
+
+  const normalizeText = (value: string) =>
+    value.trim().replace(/\s+/g, "").toLowerCase()
+
+  const [isCheckingWriting, setIsCheckingWriting] = useState(false)
+
+  const handleWritingCheck = async () => {
+    if (isCheckingWriting) return
+    if (!currentItem) return
+
+    setIsCheckingWriting(true)
+    try {
+      // 쓰기학습: "답"은 뜻(정답 의미), "문제"는 스펠링으로 뒤집어서 처리
+      const expected = getCorrectMeaning(currentItem)
+      const typed = normalizeText(writingInput)
+      const normalizedExpected = normalizeText(expected)
+
+      // 정답 제출
+      if (typed && normalizedExpected && typed === normalizedExpected) {
+        // 다음 문제로 이동
+        const newIndex = safeCurrentIndex + 1
+        if (safeCurrentIndex < sortedItems.length - 1) {
+          setWritingInput("")
+          setWritingWrongCount(0)
+          setWritingHearts(3)
+          setWritingShowAnswer(false)
+
+          // 진행률을 MEMORIZE로 업데이트 (writing은 memorization에 매핑)
+          await updateProgress(newIndex)
+          setCurrentIndex(newIndex)
+        } else {
+          // 마지막 문제: 완료 처리 후 캘린더로 이동
+          await handleWordlistMemorizeComplete()
+        }
+        return
+      }
+
+      // 오답 처리 (정답 보기 전: 하트 차감, 3번이면 정답 표시)
+      if (!writingShowAnswer) {
+        const nextWrongCount = writingWrongCount + 1
+        setWritingWrongCount(nextWrongCount)
+        setWritingHearts((prev) => Math.max(0, prev - 1))
+
+        if (nextWrongCount >= 3) {
+          setWritingShowAnswer(true)
+          setWritingInput("")
+        }
+      } else {
+        // 정답을 이미 보여준 상태: 틀리면 그대로 재작성 대기
+        toast({
+          title: "다시 작성하세요",
+          description: "정답을 다시 확인한 뒤 스펠링을 입력해주세요.",
+          variant: "destructive",
+        })
+      }
+    } finally {
+      setIsCheckingWriting(false)
+    }
   }
 
   // 항상 order로 정렬된 배열 사용 (서버와 동일한 순서 보장)
@@ -709,8 +801,11 @@ export function LearningContent({
           <CardContent className="py-8 text-center space-y-4">
             <h2 className="text-2xl font-bold mb-4">학습이 완료되었습니다.</h2>
             <div className="flex flex-col gap-3 items-center">
-              <Button onClick={handleRestart} className="w-full max-w-xs">
-                복습하기
+              <Button
+                onClick={() => setShowRestartConfirm(true)}
+                className="w-full max-w-xs"
+              >
+                다시보기
               </Button>
               <Button onClick={() => router.push("/student")} variant="outline" className="w-full max-w-xs">
                 홈으로
@@ -718,6 +813,39 @@ export function LearningContent({
             </div>
           </CardContent>
         </Card>
+
+        <Dialog open={showRestartConfirm} onOpenChange={setShowRestartConfirm}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>다시보기</DialogTitle>
+              <DialogDescription>
+                시험점수가 초기화 됩니다.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="flex gap-2 justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setShowRestartConfirm(false)
+                  router.push("/student")
+                }}
+              >
+                아니요
+              </Button>
+              <Button
+                type="button"
+                onClick={() => {
+                  setShowRestartConfirm(false)
+                  router.push(`/student/learn/${assignmentId}/${module.id}?phase=${phase}&review=true`)
+                }}
+              >
+                예
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     )
   }
@@ -872,8 +1000,17 @@ export function LearningContent({
           {isReviewMode && <span className="ml-2 text-sm text-muted-foreground">(복습)</span>}
           {phase === "wordlist" && <span className="ml-2 text-sm text-muted-foreground">(단어목록)</span>}
           {phase === "memorization" && <span className="ml-2 text-sm text-muted-foreground">(암기학습)</span>}
+          {phase === "writing" && <span className="ml-2 text-sm text-muted-foreground">(쓰기학습)</span>}
           {phase === "test" && <span className="ml-2 text-sm text-muted-foreground">(테스트)</span>}
         </h1>
+        <Button
+          variant="outline"
+          onClick={() => router.push("/student")}
+          disabled={isLoading || isCheckingWriting || isCompleting}
+          className="ml-3"
+        >
+          나가기
+        </Button>
       </div>
 
       <Card>
@@ -915,7 +1052,11 @@ export function LearningContent({
             <div className="space-y-4">
               <div 
                 className="text-center py-12 cursor-pointer min-h-[300px] flex items-center justify-center"
-                onClick={() => setShowMeaning(!showMeaning)}
+                onClick={() => {
+                  // 단어(카드) 클릭할 때마다 음성 재생
+                  handlePlaySound()
+                  setShowMeaning(!showMeaning)
+                }}
               >
                 {module.type === "TYPE_B" && currentItem.payloadJson?.image_url && !showMeaning && (
                   <div className="mb-6">
@@ -934,6 +1075,58 @@ export function LearningContent({
                 ) : (
                   <p className="text-4xl font-bold">
                     {currentItem.payloadJson?.word_text || ""}
+                  </p>
+                )}
+              </div>
+            </div>
+          ) : phase === "writing" ? (
+            // 쓰기학습 단계: 스펠링 입력 + 하트 3개
+            <div className="space-y-4">
+              <div className="flex justify-center gap-1 text-2xl">
+                {Array.from({ length: 3 }).map((_, i) => {
+                  const filled = i < writingHearts
+                  return (
+                    <span
+                      key={i}
+                      className={filled ? "text-red-500" : "text-gray-300"}
+                    >
+                      ♥
+                    </span>
+                  )
+                })}
+              </div>
+
+              <div className="text-center py-8">
+                {/* writing은 word를 숨기고, 뜻을 보고 스펠링을 입력 */}
+                  {/* 문제: 스펠링 */}
+                  <p className="text-3xl font-bold mb-2">{getExpectedSpelling(currentItem)}</p>
+                  <p className="text-sm text-muted-foreground mb-6">뜻을 입력하고 “다음”을 누르세요.</p>
+
+                {writingShowAnswer && (
+                  <div className="space-y-2 mb-6">
+                    <p className="text-xs text-muted-foreground">정답</p>
+                    <p className="text-2xl font-bold">{getCorrectMeaning(currentItem)}</p>
+                    <p className="text-sm text-muted-foreground">정답을 보고 다시 입력한 뒤 “다음”을 누르세요.</p>
+                  </div>
+                )}
+
+                <div className="space-y-3">
+                  <input
+                    value={writingInput}
+                    onChange={(e) => setWritingInput(e.target.value)}
+                    disabled={isLoading || isCheckingWriting}
+                    placeholder={writingShowAnswer ? "정답을 보고 다시 작성" : "예: 사과"}
+                    className="w-full border rounded-lg px-3 py-2 text-base"
+                  />
+
+                  <Button className="w-full" disabled={isLoading || isCheckingWriting} onClick={handleWritingCheck}>
+                    {isLoading || isCheckingWriting ? "처리 중..." : "다음"}
+                  </Button>
+                </div>
+
+                {writingWrongCount > 0 && !writingShowAnswer && (
+                  <p className="text-xs text-red-500 mt-3">
+                    오답 {writingWrongCount} / 3
                   </p>
                 )}
               </div>
@@ -1081,19 +1274,21 @@ export function LearningContent({
 
           {/* 네비게이션 */}
           <div className="flex items-center justify-between mt-6">
-            <Button
-              variant="outline"
-              onClick={handlePrev}
-              disabled={safeCurrentIndex === 0}
-            >
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              이전
-            </Button>
+            {phase === "writing" ? null : (
+              <Button
+                variant="outline"
+                onClick={handlePrev}
+                disabled={safeCurrentIndex === 0}
+              >
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                이전
+              </Button>
+            )}
             <span className="text-sm text-muted-foreground">
               {safeCurrentIndex + 1} / {sortedItems.length}
             </span>
             {isLast ? (
-              phase === "test" ? (
+              phase === "writing" ? null : phase === "test" ? (
                 <div className="flex flex-col items-end gap-1">
                   {(() => {
                     // 완료 버튼도 답 선택 확인
@@ -1153,6 +1348,11 @@ export function LearningContent({
                     )
                   }
                   
+                  // 쓰기학습은 카드 내부 “다음” 버튼을 사용
+                  if (phase === "writing") {
+                    return null
+                  }
+
                   // 단어목록/암기학습은 답 선택 불필요
                   return (
                     <Button onClick={handleNext}>

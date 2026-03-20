@@ -84,7 +84,7 @@ export function StudentSettings({ student }: StudentSettingsProps) {
             <Input value={student.name} disabled />
           </div>
           <div>
-            <Label>아이디</Label>
+            <Label>숫자4자리</Label>
             <Input value={student.username} disabled />
           </div>
           <div>

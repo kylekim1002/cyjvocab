@@ -1,16 +1,14 @@
 "use client"
 
-import { useState } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Switch } from "@/components/ui/switch"
-import { Label } from "@/components/ui/label"
-import { formatDate } from "@/lib/utils"
+import { useMemo, useState } from "react"
 import Link from "next/link"
+import { ChevronLeft, ChevronRight } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
 
 interface Assignment {
   id: string
-  assignedDate: Date
+  assignedDate: Date | string
   modules: Array<{
     id: string
     module: {
@@ -27,178 +25,207 @@ interface Assignment {
   }>
 }
 
-interface PhaseProgress {
-  wordListProgress: number
-  memorizationProgress: number
-  testScore: number | null
-}
-
 interface StudentHomeContentProps {
   assignments: Assignment[]
-  modulePhaseProgress?: Record<string, PhaseProgress> // key: assignmentId_moduleId
 }
 
-export function StudentHomeContent({ assignments: initialAssignments, modulePhaseProgress = {} }: StudentHomeContentProps) {
-  const [showAll, setShowAll] = useState(false)
+type Phase = "wordlist" | "memorization" | "writing" | "test"
 
-  // 완료 여부 계산
-  const assignmentsWithProgress = initialAssignments.map((assignment) => {
-    const moduleProgresses = assignment.modules.map((mod) => {
-      const progress = assignment.progress.find((p) => p.moduleId === mod.module.id)
-      // assignmentId + moduleId 조합으로 progress 조회 (동일 학습 재제출 시 구분)
-      const progressKey = `${assignment.id}_${mod.module.id}`
-      const phaseProgress = modulePhaseProgress[progressKey] || {
-        wordListProgress: 0,
-        memorizationProgress: 0,
-        testScore: null,
-      }
-      
-      // 단어목록, 암기학습, 테스트 모두 완료되었는지 확인
-      // 새로 등록한 학습은 progress가 없으므로 완료로 표시되지 않음
-      const wordListCompleted = phaseProgress.wordListProgress >= 100
-      const memorizationCompleted = phaseProgress.memorizationProgress >= 100
-      const testCompleted = phaseProgress.testScore !== null && phaseProgress.testScore !== undefined
-      
-      // 실제로 학습을 시작했는지 확인 (progress가 있거나 세션이 있어야 함)
-      const hasStarted = progress !== undefined || 
-                        wordListCompleted || 
-                        memorizationCompleted || 
-                        testCompleted
-      
-      return {
-        ...mod,
-        progressPct: progress?.progressPct || 0,
-        completed: progress?.completed || false,
-        wordListCompleted,
-        memorizationCompleted,
-        testCompleted,
-        hasStarted, // 학습 시작 여부
-      }
-    })
+const phaseTabs: Array<{ key: Phase; label: string }> = [
+  { key: "wordlist", label: "단어학습" },
+  { key: "memorization", label: "플래시카드" },
+  { key: "writing", label: "쓰기학습" },
+  { key: "test", label: "테스트" },
+]
 
-    const avgProgress = moduleProgresses.length > 0
-      ? Math.round(
-          moduleProgresses.reduce((sum, p) => sum + p.progressPct, 0) /
-            moduleProgresses.length
-        )
-      : 0
+const weekLabels = ["일", "월", "화", "수", "목", "금", "토"]
 
-    // 같은 날짜의 모든 모듈이 완료되었는지 확인
-    // 한 가지라도 완료되지 않았다면 완료로 표시하지 않음
-    const allModulesCompleted = moduleProgresses.length > 0 &&
-      moduleProgresses.every((p) => 
-        p.wordListCompleted && p.memorizationCompleted && p.testCompleted
-      )
+function toDateKey(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(
+    date.getDate()
+  ).padStart(2, "0")}`
+}
 
-    return {
-      ...assignment,
-      moduleProgresses,
-      avgProgress,
-      allCompleted: allModulesCompleted, // 같은 날짜의 모든 학습이 완료되어야 완료
-    }
+function getStartBadgeClass(phase: Phase) {
+  switch (phase) {
+    case "wordlist":
+      return "bg-blue-50 text-blue-600"
+    case "memorization":
+      return "bg-green-50 text-green-600"
+    case "writing":
+      return "bg-purple-50 text-purple-600"
+    case "test":
+      return "bg-red-50 text-red-600"
+    default:
+      return "bg-rose-50 text-rose-600"
+  }
+}
+
+export function StudentHomeContent({ assignments: initialAssignments }: StudentHomeContentProps) {
+  const [selectedPhase, setSelectedPhase] = useState<Phase>("wordlist")
+  const [monthCursor, setMonthCursor] = useState(() => {
+    const now = new Date()
+    return new Date(now.getFullYear(), now.getMonth(), 1)
   })
+  const [selectedDateKey, setSelectedDateKey] = useState<string | null>(null)
 
-  // 필터링
-  const filteredAssignments = showAll
-    ? assignmentsWithProgress
-    : assignmentsWithProgress.filter((a) => !a.allCompleted)
+  const assignments = useMemo(
+    () =>
+      initialAssignments.map((a) => ({
+        ...a,
+        assignedDate: new Date(a.assignedDate),
+      })),
+    [initialAssignments]
+  )
+
+  const dateAssignmentsMap = useMemo(() => {
+    const map = new Map<string, Assignment[]>()
+    assignments.forEach((assignment) => {
+      const key = toDateKey(new Date(assignment.assignedDate))
+      const prev = map.get(key) || []
+      prev.push(assignment)
+      map.set(key, prev)
+    })
+    return map
+  }, [assignments])
+
+  const monthGrid = useMemo(() => {
+    const year = monthCursor.getFullYear()
+    const month = monthCursor.getMonth()
+    const firstDay = new Date(year, month, 1)
+    const lastDate = new Date(year, month + 1, 0).getDate()
+    const startWeekday = firstDay.getDay()
+
+    const cells: Array<Date | null> = []
+    for (let i = 0; i < startWeekday; i++) cells.push(null)
+    for (let d = 1; d <= lastDate; d++) cells.push(new Date(year, month, d))
+    while (cells.length % 7 !== 0) cells.push(null)
+    return cells
+  }, [monthCursor])
+
+  const selectedAssignments = selectedDateKey ? dateAssignmentsMap.get(selectedDateKey) || [] : []
 
   return (
-    <div className="container mx-auto p-4 space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">학습 홈</h1>
-        <div className="flex items-center gap-2">
-          <Switch
-            id="show-all"
-            checked={showAll}
-            onCheckedChange={(checked) => {
-              console.log("Show all toggled:", checked)
-              setShowAll(checked)
-            }}
-          />
-          <Label htmlFor="show-all" className="cursor-pointer" onClick={() => setShowAll(!showAll)}>
-            모두 보기
-          </Label>
+    <div className="mx-auto max-w-md px-4 py-4 pb-24 space-y-4">
+      <div className="space-y-2">
+        {/* 년월: 최상단 중앙 정렬 + 좌/우 월 이동 버튼 */}
+        <div className="relative flex items-center justify-center min-h-[32px]">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="absolute left-0"
+            onClick={() =>
+              setMonthCursor((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))
+            }
+          >
+            <ChevronLeft className="h-5 w-5" />
+          </Button>
+          <p className="text-2xl font-semibold tabular-nums">
+            {monthCursor.getFullYear()}.{String(monthCursor.getMonth() + 1).padStart(2, "0")}
+          </p>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="absolute right-0"
+            onClick={() =>
+              setMonthCursor((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))
+            }
+          >
+            <ChevronRight className="h-5 w-5" />
+          </Button>
+        </div>
+
+        {/* 탭: 바로 아래 중앙 배치 */}
+        <div className="flex justify-center">
+          <div className="inline-flex rounded-lg border bg-white p-1">
+            {phaseTabs.map((tab) => (
+              <Button
+                key={tab.key}
+                type="button"
+                variant={selectedPhase === tab.key ? "default" : "ghost"}
+                className="h-8 px-2 text-xs"
+                onClick={() => setSelectedPhase(tab.key)}
+              >
+                {tab.label}
+              </Button>
+            ))}
+          </div>
         </div>
       </div>
 
-      {filteredAssignments.length === 0 ? (
-        <Card>
-          <CardContent className="py-8 text-center text-muted-foreground">
-            {showAll ? "배정된 학습이 없습니다." : "완료하지 않은 학습이 없습니다."}
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="space-y-4">
-          {filteredAssignments.map((assignment) => (
-            <Card key={assignment.id}>
-              <CardHeader>
-                <CardTitle>{formatDate(assignment.assignedDate)}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {assignment.moduleProgresses.map((mod) => {
-                    // assignmentId + moduleId 조합으로 progress 조회 (동일 학습 재제출 시 구분)
-                    const progressKey = `${assignment.id}_${mod.module.id}`
-                    const phaseProgress = modulePhaseProgress[progressKey] || {
-                      wordListProgress: 0,
-                      memorizationProgress: 0,
-                      testScore: null,
-                    }
-
-                    return (
-                      <div key={mod.id} className="space-y-2">
-                        <p className="font-medium text-lg">{mod.module.title}</p>
-                        <div className="flex items-center gap-2 flex-wrap">
-                          {/* 단어목록 버튼 */}
-                          <div className="flex items-center gap-2">
-                            <Link href={`/student/learn/${assignment.id}/${mod.module.id}?phase=wordlist`}>
-                              <Button size="sm" variant="outline" className="h-8">
-                                단어목록
-                              </Button>
-                            </Link>
-                            <span className="text-sm text-muted-foreground">
-                              진행률 {phaseProgress.wordListProgress}%
-                            </span>
-                          </div>
-
-                          <div className="w-px h-6 bg-gray-300"></div>
-
-                          {/* 암기학습 버튼 */}
-                          <div className="flex items-center gap-2">
-                            <Link href={`/student/learn/${assignment.id}/${mod.module.id}?phase=memorization`}>
-                              <Button size="sm" variant="outline" className="h-8">
-                                암기학습
-                              </Button>
-                            </Link>
-                            <span className="text-sm text-muted-foreground">
-                              진행률 {phaseProgress.memorizationProgress}%
-                            </span>
-                          </div>
-
-                          <div className="w-px h-6 bg-gray-300"></div>
-
-                          {/* 테스트 버튼 */}
-                          <div className="flex items-center gap-2">
-                            <Link href={`/student/learn/${assignment.id}/${mod.module.id}?phase=test`}>
-                              <Button size="sm" variant="outline" className="h-8">
-                                테스트
-                              </Button>
-                            </Link>
-                            <span className="text-sm text-muted-foreground">
-                              {phaseProgress.testScore !== null && phaseProgress.testScore !== undefined
-                                ? `최고점 ${phaseProgress.testScore}점`
-                                : "최고점 응시전"}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              </CardContent>
-            </Card>
+      <div className="rounded-xl border bg-white p-3">
+        <div className="grid grid-cols-7 mb-2">
+          {weekLabels.map((w) => (
+            <div
+              key={w}
+              className={cn(
+                "text-center text-xs py-2",
+                w === "일" ? "text-rose-500" : w === "토" ? "text-fuchsia-500" : "text-muted-foreground"
+              )}
+            >
+              {w}
+            </div>
           ))}
+        </div>
+
+        <div className="grid grid-cols-7 gap-y-2">
+          {monthGrid.map((dateCell, idx) => {
+            if (!dateCell) return <div key={`empty-${idx}`} className="h-14" />
+
+            const key = toDateKey(dateCell)
+            const hasLearning = (dateAssignmentsMap.get(key)?.length || 0) > 0
+            const isSelected = selectedDateKey === key
+
+            return (
+              <button
+                key={key}
+                type="button"
+                className={cn(
+                  "h-14 rounded-lg border border-transparent px-1 py-1 text-center",
+                  isSelected ? "border-primary" : "hover:bg-gray-50"
+                )}
+                onClick={() => setSelectedDateKey(key)}
+              >
+                <div className="text-base">{dateCell.getDate()}</div>
+                {hasLearning && (
+                  <div
+                    className={`mx-auto mt-1 w-fit rounded px-1.5 py-0.5 text-[10px] ${getStartBadgeClass(
+                      selectedPhase
+                    )}`}
+                  >
+                    시작
+                  </div>
+                )}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {selectedDateKey ? (
+        selectedAssignments.length > 0 ? (
+          <div className="space-y-3">
+            {selectedAssignments.flatMap((assignment) =>
+              assignment.modules.map((mod) => (
+                <div key={`${assignment.id}-${mod.module.id}`} className="rounded-xl border bg-white p-3">
+                  <p className="text-sm font-medium mb-2">{mod.module.title}</p>
+                  <Link href={`/student/learn/${assignment.id}/${mod.module.id}?phase=${selectedPhase}`}>
+                    <Button className="w-full">시작</Button>
+                  </Link>
+                </div>
+              ))
+            )}
+          </div>
+        ) : (
+          <div className="rounded-xl border bg-white p-4 text-sm text-muted-foreground">
+            선택한 날짜에는 학습이 없습니다.
+          </div>
+        )
+      ) : (
+        <div className="rounded-xl border bg-white p-4 text-sm text-muted-foreground">
+          날짜를 선택하면 학습 시작 버튼이 표시됩니다.
         </div>
       )}
     </div>

@@ -15,9 +15,15 @@ export async function POST(
   }
 
   try {
-    const student = await prisma.student.findUnique({
-      where: { username: params.username },
-    })
+    const body = await request.json().catch(() => ({} as any))
+    const { studentId } = body
+
+    const student = studentId
+      ? await prisma.student.findUnique({ where: { id: String(studentId) } })
+      : await prisma.student.findFirst({
+          where: { username: params.username },
+          orderBy: { createdAt: "desc" },
+        })
 
     if (!student) {
       return NextResponse.json(

@@ -21,7 +21,8 @@ export const authOptions: NextAuthOptions = {
     CredentialsProvider({
       name: "Credentials",
       credentials: {
-        username: { label: "아이디", type: "text" },
+        name: { label: "이름", type: "text" },
+        username: { label: "전화번호 뒷 4자리", type: "text" },
         password: { label: "비밀번호", type: "password" },
         autoLogin: { label: "자동로그인", type: "text" },
       },
@@ -52,10 +53,8 @@ export const authOptions: NextAuthOptions = {
           return null
         }
 
-        // 일반 로그인
-        if (!credentials?.username || !credentials?.password) {
-          return null
-        }
+        // 일반 로그인 (학생/관리자 모두: 이름 + 숫자4자리(username))
+        if (!credentials?.username) return null
 
         // 레이트 리밋 확인
           try {
@@ -78,7 +77,8 @@ export const authOptions: NextAuthOptions = {
 
         const user = await verifyCredentials(
           credentials.username,
-          credentials.password,
+          credentials.password ?? "",
+          credentials.name ?? undefined,
           Array.isArray(ipAddress) ? ipAddress[0] : ipAddress
         )
 

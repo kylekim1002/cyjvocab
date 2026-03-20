@@ -85,19 +85,18 @@ export async function POST(request: Request) {
     console.log("=== API: Received request body ===")
     console.log(JSON.stringify(body, null, 2))
     
-    const { campusId, name, gradeId, levelId, username, password, school, status } = body
+    const { campusId, name, gradeId, levelId, username, school, status } = body
 
     // 필수 필드 확인
-    if (!campusId || !name || !gradeId || !username || !password) {
+    if (!campusId || !name || !gradeId || !username) {
       console.error("Missing required fields:", { 
         campusId: campusId || "MISSING", 
         name: name || "MISSING", 
         gradeId: gradeId || "MISSING", 
         username: username || "MISSING", 
-        hasPassword: !!password 
       })
       return NextResponse.json(
-        { error: "캠퍼스, 학생명, 학년, 아이디, 비밀번호는 필수입니다." },
+        { error: "캠퍼스, 학생명, 학년, 아이디는 필수입니다." },
         { status: 400 }
       )
     }
@@ -123,21 +122,13 @@ export async function POST(request: Request) {
       gradeIdType: typeof gradeId
     })
 
-    // username 중복 확인
-    const existingUser = await prisma.user.findUnique({
-      where: { username: username.trim() },
-    })
-
-    if (existingUser) {
-      return NextResponse.json(
-        { error: "이미 존재하는 아이디입니다." },
-        { status: 400 }
-      )
-    }
-
     // ID 정리 (먼저 trim)
     const trimmedCampusId = campusId.trim()
     const trimmedGradeId = gradeId.trim()
+    const phoneLast4 = username.trim()
+    // User.username은 DB 유니크 제약이 있으므로 학생의 숫자4자리와 분리합니다.
+    // 로그인은 Student.name + Student.username(숫자4자리)로 처리합니다.
+    const internalUserUsername = `${phoneLast4}_${Date.now()}_${Math.random().toString(16).slice(2)}`
 
     // 캠퍼스 존재 확인
     const campus = await prisma.campus.findUnique({
@@ -181,8 +172,9 @@ export async function POST(request: Request) {
       )
     }
 
-    // 비밀번호 해시
-    const hashedPassword = await bcrypt.hash(password, 10)
+    // 학생은 "이름 + 아이디(username)"로 로그인 (비밀번호 입력 없음)
+    // 스키마 상 password가 필수라서 내부적으로 username 기반 해시 저장
+    const hashedPassword = await bcrypt.hash(phoneLast4, 10)
 
     // 자동로그인 토큰 생성
     const autoLoginToken = generateAutoLoginToken()
@@ -202,7 +194,7 @@ export async function POST(request: Request) {
       // 임시로 User를 생성하여 ID를 얻음 (나중에 업데이트)
       const tempUser = await tx.user.create({
         data: {
-          username: username.trim(),
+          username: internalUserUsername,
           password: hashedPassword,
           role: "STUDENT",
           campusId: trimmedCampusId,
@@ -230,9 +222,9 @@ export async function POST(request: Request) {
         data: {
           id: studentId,
           name: name.trim(),
-          username: username.trim(),
+          username: phoneLast4,
           password: hashedPassword,
-          plainPassword: password, // 관리자용 평문 비밀번호 저장
+          plainPassword: null,
           campusId: trimmedCampusId,
           gradeId: trimmedGradeId,
           levelId: trimmedLevelId,

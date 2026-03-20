@@ -1,6 +1,5 @@
 import { UserRole, StudentStatus } from '@prisma/client'
 import { prisma } from './prisma'
-import bcrypt from 'bcryptjs'
 
 export interface AuthUser {
   id: string
@@ -15,13 +14,76 @@ export interface AuthUser {
 export async function verifyCredentials(
   username: string,
   password: string,
+  name?: string,
   ipAddress?: string
 ): Promise<AuthUser | null> {
   try {
     console.log("=== verifyCredentials 시작 ===")
     console.log("Username:", username)
     console.log("Password length:", password?.length)
-    
+    console.log("Name provided:", !!name)
+
+    const inputName = (name ?? "").trim()
+    if (!inputName) {
+      await recordLoginAttempt(username, false, ipAddress)
+      return null
+    }
+    const normalizedInputName = inputName.replace(/\s+/g, "").toLowerCase()
+
+    // 학생 로그인: Student.username(숫자4자리, 중복 가능) + Student.name 조합으로 찾음
+    const candidateStudents = await prisma.student.findMany({
+      where: { username },
+      include: {
+        user: {
+          select: {
+            id: true,
+            username: true,
+            role: true,
+            campusId: true,
+            isActive: true,
+          },
+        },
+        studentClasses: {
+          where: {
+            class: { deletedAt: null },
+          },
+          take: 1,
+        },
+      },
+      take: 20,
+    })
+
+    const matchedStudent = candidateStudents.find((s) => {
+      const actual = (s.name ?? "").trim()
+      if (!actual) return false
+      const normalizedActual = actual.replace(/\s+/g, "").toLowerCase()
+      return normalizedActual === normalizedInputName
+    })
+
+    if (matchedStudent) {
+      if (matchedStudent.status !== StudentStatus.ACTIVE) {
+        await recordLoginAttempt(username, false, ipAddress, matchedStudent.id)
+        return null
+      }
+      if (!matchedStudent.user || !matchedStudent.user.isActive) {
+        await recordLoginAttempt(username, false, ipAddress, matchedStudent.id)
+        return null
+      }
+
+      await recordLoginAttempt(username, true, ipAddress, matchedStudent.user.id)
+
+      return {
+        id: matchedStudent.user.id,
+        username: matchedStudent.user.username,
+        role: matchedStudent.user.role,
+        campusId: matchedStudent.user.campusId,
+        studentId: matchedStudent.id,
+        studentStatus: matchedStudent.status,
+        hasActiveClass: (matchedStudent.studentClasses?.length ?? 0) > 0,
+      }
+    }
+
+    // 관리자/매니저 로그인: User.username(유니크) + User.name 일치로 인증
     const user = await prisma.user.findUnique({
       where: { username },
       include: {
@@ -29,9 +91,7 @@ export async function verifyCredentials(
           include: {
             studentClasses: {
               where: {
-                class: {
-                  deletedAt: null,
-                },
+                class: { deletedAt: null },
               },
               take: 1,
             },
@@ -40,55 +100,29 @@ export async function verifyCredentials(
       },
     })
 
-    console.log("User found:", {
-      exists: !!user,
-      id: user?.id,
-      username: user?.username,
-      role: user?.role,
-      isActive: user?.isActive,
-      hasStudent: !!user?.student,
-      studentStatus: user?.student?.status,
-    })
-
     if (!user) {
-      console.log("User not found for username:", username)
-      // 로그인 실패 기록
       await recordLoginAttempt(username, false, ipAddress)
       return null
     }
 
-    // 관리자/학생 공통: 비활성 사용자는 로그인 불가
     if (!user.isActive) {
-      console.log("User is not active:", user.id)
       await recordLoginAttempt(username, false, ipAddress, user.id)
       return null
     }
 
-    // 학생인 경우 상태 확인
-    if (user.role === UserRole.STUDENT && user.student) {
-      if (user.student.status !== StudentStatus.ACTIVE) {
-        console.log("Student is not ACTIVE:", user.student.status)
-        await recordLoginAttempt(username, false, ipAddress, user.id)
-        return null
-      }
-
-      // 클래스 배정 확인은 제거 (학생이 클래스 배정 전에도 로그인 가능하도록)
-      // 클래스 배정이 없어도 로그인은 가능하지만, 학습 기능은 제한됨
-    }
-
-    console.log("비밀번호 확인 시작...")
-    const isValid = await bcrypt.compare(password, user.password)
-    console.log("비밀번호 확인 결과:", isValid)
-    console.log("저장된 해시:", user.password.substring(0, 20) + "...")
-    
-    if (!isValid) {
-      console.log("비밀번호 불일치")
+    if (user.role !== UserRole.SUPER_ADMIN && user.role !== UserRole.MANAGER) {
+      // 학생인데 user.username으로는 매칭되지 않은 케이스이므로 실패 처리
       await recordLoginAttempt(username, false, ipAddress, user.id)
       return null
     }
 
-    console.log("로그인 성공!")
-    // 성공 기록
+    const actualName = (user.name ?? "").trim()
+    const normalizedActualName = actualName.replace(/\s+/g, "").toLowerCase()
+    if (!actualName || normalizedActualName !== normalizedInputName) {
+      await recordLoginAttempt(username, false, ipAddress, user.id)
+      return null
+    }
+
     await recordLoginAttempt(username, true, ipAddress, user.id)
 
     return {

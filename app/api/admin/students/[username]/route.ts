@@ -2,7 +2,6 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth-options"
 import { prisma } from "@/lib/prisma"
-import bcrypt from "bcryptjs"
 
 export async function PATCH(
   request: Request,
@@ -16,26 +15,42 @@ export async function PATCH(
 
   try {
     const body = await request.json()
-    const { name, gradeId, levelId, school, status, password } = body
+    const {
+      name,
+      gradeId,
+      levelId,
+      school,
+      status,
+      username: newUsername,
+      studentId,
+    } = body
 
     if (!params.username) {
       return NextResponse.json(
-        { error: "학생 아이디가 필요합니다." },
+        { error: "학생 숫자4자리가 필요합니다." },
         { status: 400 }
       )
     }
 
     console.log("Update student request:", {
       username: params.username,
-      body: { name, gradeId, levelId, school, status, hasPassword: !!password },
+      body: { name, gradeId, levelId, school, status, studentId },
     })
 
-    // 학생 존재 확인
-    const student = await prisma.student.findUnique({
-      where: { username: params.username },
-    })
+    // 학생 존재 확인 (숫자4자리가 중복될 수 있으므로 studentId 우선)
+    const targetStudent = studentId
+      ? await prisma.student.findUnique({ where: { id: String(studentId) } })
+      : await prisma.student.findFirst({
+          where: {
+            username: params.username,
+            ...(typeof name === "string" && name.trim()
+              ? { name: name.trim() }
+              : {}),
+          },
+          orderBy: { createdAt: "desc" },
+        })
 
-    if (!student) {
+    if (!targetStudent) {
       return NextResponse.json(
         { error: "학생을 찾을 수 없습니다." },
         { status: 404 }
@@ -43,7 +58,7 @@ export async function PATCH(
     }
 
     // 학년 코드 검증
-    let trimmedGradeId = student.gradeId
+    let trimmedGradeId = targetStudent.gradeId
     if (gradeId && gradeId.trim()) {
       const gradeCode = await prisma.code.findUnique({
         where: { id: gradeId.trim() },
@@ -58,7 +73,7 @@ export async function PATCH(
     }
 
     // 레벨 코드 검증 (선택사항)
-    let trimmedLevelId = student.levelId
+    let trimmedLevelId = targetStudent.levelId
     if (levelId !== undefined) {
       if (levelId && levelId !== "none" && levelId.trim()) {
         const levelCode = await prisma.code.findUnique({
@@ -77,32 +92,22 @@ export async function PATCH(
     }
 
     // 업데이트 데이터 준비
+    const trimmedNewUsername =
+      typeof newUsername === "string" && newUsername.trim()
+        ? newUsername.trim()
+        : undefined
+
     const updateData: any = {
-      name: name?.trim() || student.name,
+      name: typeof name === "string" ? name.trim() : targetStudent.name,
       gradeId: trimmedGradeId,
       levelId: trimmedLevelId,
-      school: school !== undefined ? (school?.trim() || null) : student.school,
-      status: status || student.status,
+      school:
+        school !== undefined ? (school?.trim() || null) : targetStudent.school,
+      status: status || targetStudent.status,
+      ...(trimmedNewUsername ? { username: trimmedNewUsername } : {}),
     }
-
-    // 비밀번호 변경 (선택사항)
-    if (password && password.trim()) {
-      const hashedPassword = await bcrypt.hash(password.trim(), 10)
-      updateData.password = hashedPassword
-      updateData.plainPassword = password.trim()
-      
-      // User 비밀번호도 업데이트
-      await prisma.user.update({
-        where: { id: student.id },
-        data: {
-          password: hashedPassword,
-        },
-      })
-    }
-
-    // 학생 정보 업데이트
     const updatedStudent = await prisma.student.update({
-      where: { username: params.username },
+      where: { id: targetStudent.id },
       data: updateData,
       include: {
         campus: true,

@@ -12,8 +12,8 @@ import { useToast } from "@/components/ui/use-toast"
 export default function LoginPage() {
   const router = useRouter()
   const { toast } = useToast()
+  const [name, setName] = useState("")
   const [username, setUsername] = useState("")
-  const [password, setPassword] = useState("")
   const [isLoading, setIsLoading] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -21,10 +21,12 @@ export default function LoginPage() {
     setIsLoading(true)
 
     try {
-      console.log("로그인 시도:", { username })
+      console.log("로그인 시도:", { name, username })
       const result = await signIn("credentials", {
         username,
-        password,
+        // 학생 로그인: 비밀번호 없음(서버에서 name+username만 검증)
+        password: "",
+        name,
         redirect: false,
       })
 
@@ -32,21 +34,31 @@ export default function LoginPage() {
 
       if (result?.error) {
         console.error("로그인 오류:", result.error)
-        let errorMessage = "아이디 또는 비밀번호가 올바르지 않습니다."
+        const errorMessage = "이름 또는 전화번호 뒷 4자리가 올바르지 않습니다."
         
         if (result.error === "CredentialsSignin") {
-          errorMessage = "아이디 또는 비밀번호가 올바르지 않습니다."
+          toast({
+            title: "로그인 실패",
+            description: errorMessage,
+            variant: "destructive",
+          })
+          setIsLoading(false)
+          return
         } else if (result.error.includes("로그인 시도가 너무 많습니다")) {
-          errorMessage = result.error
+          toast({
+            title: "로그인 실패",
+            description: result.error,
+            variant: "destructive",
+          })
+          setIsLoading(false)
+          return
         } else {
-          errorMessage = `로그인에 실패했습니다: ${result.error}`
+          toast({
+            title: "로그인 실패",
+            description: `로그인에 실패했습니다: ${result.error}`,
+            variant: "destructive",
+          })
         }
-        
-        toast({
-          title: "로그인 실패",
-          description: errorMessage,
-          variant: "destructive",
-        })
         setIsLoading(false)
         return
       }
@@ -82,7 +94,18 @@ export default function LoginPage() {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="username">아이디</Label>
+              <Label htmlFor="name">이름</Label>
+              <Input
+                id="name"
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+                disabled={isLoading}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="username">전화번호 뒷 4자리</Label>
               <Input
                 id="username"
                 type="text"
@@ -90,17 +113,8 @@ export default function LoginPage() {
                 onChange={(e) => setUsername(e.target.value)}
                 required
                 disabled={isLoading}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">비밀번호</Label>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                disabled={isLoading}
+                inputMode="numeric"
+                placeholder="예: 1234"
               />
             </div>
             <Button type="submit" className="w-full" disabled={isLoading}>
