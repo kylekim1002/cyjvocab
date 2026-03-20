@@ -14,16 +14,21 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
     const levelId = searchParams.get("levelId")
+    const semesterId = searchParams.get("semesterId")
 
     const where: any = {}
     if (levelId) {
       where.levelId = levelId
+    }
+    if (semesterId) {
+      where.semesterId = semesterId
     }
 
     const modules = await prisma.learningModule.findMany({
       where,
       include: {
         level: true,
+        semester: true,
         grade: true,
         items: {
           orderBy: { order: "asc" },
@@ -50,11 +55,11 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { title, type, levelId, gradeId, memo, items } = await request.json()
+    const { title, type, semesterId, levelId, gradeId, memo, items } = await request.json()
 
-    if (!title || !title.trim() || !type || !levelId) {
+    if (!title || !title.trim() || !type || !semesterId || !levelId) {
       return NextResponse.json(
-        { error: "제목, 타입, 레벨은 필수입니다." },
+        { error: "제목, 타입, 학기, 레벨은 필수입니다." },
         { status: 400 }
       )
     }
@@ -68,6 +73,17 @@ export async function POST(request: Request) {
 
     // gradeId가 빈 문자열이면 null로 변환
     const finalGradeId = gradeId && gradeId !== "" ? gradeId : null
+
+    // 학기 코드 검증
+    const semesterCode = await prisma.code.findUnique({
+      where: { id: semesterId },
+    })
+    if (!semesterCode || semesterCode.category !== "SEMESTER") {
+      return NextResponse.json(
+        { error: "학기 코드를 찾을 수 없습니다." },
+        { status: 400 }
+      )
+    }
 
     // 문항 검증
     if (items && Array.isArray(items)) {
@@ -134,6 +150,7 @@ export async function POST(request: Request) {
       data: {
         title: title.trim(),
         type: learningType,
+        semesterId,
         levelId,
         gradeId: finalGradeId,
         memo: memo?.trim() || null,
@@ -155,6 +172,7 @@ export async function POST(request: Request) {
       },
       include: {
         level: true,
+        semester: true,
         grade: true,
         items: {
           orderBy: { order: "asc" },
@@ -167,7 +185,7 @@ export async function POST(request: Request) {
     console.error("Create module error:", error)
     if (error.code === "P2003") {
       return NextResponse.json(
-        { error: "레벨 또는 학년 코드를 찾을 수 없습니다." },
+        { error: "학기, 레벨 또는 학년 코드를 찾을 수 없습니다." },
         { status: 400 }
       )
     }

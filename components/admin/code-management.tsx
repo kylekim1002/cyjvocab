@@ -213,6 +213,7 @@ export function CodeManagement({ initialCodes }: CodeManagementProps) {
 
   const gradeCodes = codes.filter((c) => c.category === "GRADE")
   const levelCodes = codes.filter((c) => c.category === "LEVEL")
+  const semesterCodes = codes.filter((c) => c.category === "SEMESTER")
 
   return (
     <div className="space-y-6">
@@ -272,6 +273,7 @@ export function CodeManagement({ initialCodes }: CodeManagementProps) {
                 <SelectContent>
                   <SelectItem value="GRADE">학년</SelectItem>
                   <SelectItem value="LEVEL">레벨</SelectItem>
+                  <SelectItem value="SEMESTER">학기</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -370,6 +372,51 @@ export function CodeManagement({ initialCodes }: CodeManagementProps) {
               </TableHeader>
               <TableBody>
                 {levelCodes.map((code) => (
+                  <TableRow key={code.id}>
+                    <TableCell>{code.value}</TableCell>
+                    <TableCell>{code.order}</TableCell>
+                    <TableCell>
+                      <div className="flex gap-2">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleEdit(code)}
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDelete(code.id)}
+                        >
+                          <Minus className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>학기</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>값</TableHead>
+                  <TableHead>순서</TableHead>
+                  <TableHead>작업</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {semesterCodes.map((code) => (
                   <TableRow key={code.id}>
                     <TableCell>{code.value}</TableCell>
                     <TableCell>{code.order}</TableCell>

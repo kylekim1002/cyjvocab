@@ -22,7 +22,14 @@ VALUES
     (gen_random_uuid()::text, 'LEVEL', 'Level 5', 5, NOW(), NOW())
 ON CONFLICT ("category", "value") DO NOTHING;
 
--- 3. 관리자 계정 생성
+-- 3. 코드값 생성 (학기)
+INSERT INTO "Code" ("id", "category", "value", "order", "createdAt", "updatedAt")
+VALUES
+    (gen_random_uuid()::text, 'SEMESTER', '1학기', 1, NOW(), NOW()),
+    (gen_random_uuid()::text, 'SEMESTER', '2학기', 2, NOW(), NOW())
+ON CONFLICT ("category", "value") DO NOTHING;
+
+-- 4. 관리자 계정 생성
 -- 비밀번호: admin123 (bcrypt 해시 필요 - 아래는 예시, 실제로는 bcrypt로 해시된 값 사용)
 -- 참고: 실제 비밀번호 해시는 애플리케이션에서 생성해야 합니다
 -- 여기서는 임시로 평문을 사용하지만, 실제 운영 환경에서는 반드시 해시된 비밀번호를 사용하세요

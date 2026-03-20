@@ -32,6 +32,7 @@ interface LearningModule {
   type: string
   memo: string | null
   level: { id: string; value: string }
+  semester: { id: string; value: string } | null
   grade: { id: string; value: string } | null
   items: Array<{ id: string; order: number; payloadJson: any }>
 }
@@ -59,6 +60,7 @@ export function LearningManagement({
   const [formData, setFormData] = useState({
     title: "",
     type: "TYPE_A",
+    semesterId: "",
     levelId: "",
     gradeId: "",
     memo: "",
@@ -67,6 +69,7 @@ export function LearningManagement({
   const [editFormData, setEditFormData] = useState({
     title: "",
     type: "TYPE_A",
+    semesterId: "",
     levelId: "",
     gradeId: "",
     memo: "",
@@ -74,6 +77,7 @@ export function LearningManagement({
   const [editItems, setEditItems] = useState<LearningItem[]>([])
   const [isExcelUpload, setIsExcelUpload] = useState(false)
 
+  const semesterCodes = codes.filter((c) => c.category === "SEMESTER")
   const levelCodes = codes.filter((c) => c.category === "LEVEL")
   const gradeCodes = codes.filter((c) => c.category === "GRADE")
 
@@ -178,10 +182,10 @@ export function LearningManagement({
 
   // 학습 생성
   const handleSubmit = async () => {
-    if (!formData.title || !formData.levelId) {
+    if (!formData.title || !formData.semesterId || !formData.levelId) {
       toast({
         title: "오류",
-        description: "제목과 레벨은 필수입니다.",
+        description: "제목과 학기, 레벨은 필수입니다.",
         variant: "destructive",
       })
       return
@@ -317,6 +321,7 @@ export function LearningManagement({
         body: JSON.stringify({
           title: formData.title,
           type: formData.type,
+          semesterId: formData.semesterId,
           levelId: formData.levelId,
           gradeId: formData.gradeId && formData.gradeId !== "" && formData.gradeId !== "none" ? formData.gradeId : null,
           memo: formData.memo || null,
@@ -338,6 +343,7 @@ export function LearningManagement({
       setFormData({
         title: "",
         type: "TYPE_A",
+        semesterId: "",
         levelId: "",
         gradeId: "",
         memo: "",
@@ -358,6 +364,9 @@ export function LearningManagement({
     const template = [
       {
         type: "TYPE_A",
+        semester: "1학기",
+        level: "Level 1",
+        grade: "1학년",
         word_text: "apple",
         image_url: "",
         choice1: "사과",
@@ -368,6 +377,9 @@ export function LearningManagement({
       },
       {
         type: "TYPE_B",
+        semester: "1학기",
+        level: "Level 1",
+        grade: "1학년",
         word_text: "book",
         image_url: "https://example.com/book.jpg",
         choice1: "책",
@@ -399,21 +411,119 @@ export function LearningManagement({
       const errors: Array<{ row: number; reason: string }> = []
       const parsedItems: LearningItem[] = []
 
+      // 템플릿(엑셀) 상단의 모듈 정보(학기/레벨/학년/타입)를 첫 행에서 읽습니다.
+      // 이후 모든 행이 동일한 값이어야 합니다.
+      const firstRow = data[0] || {}
+      const templateType = firstRow.type
+      const effectiveType =
+        templateType === "TYPE_A" || templateType === "TYPE_B" ? templateType : formData.type
+
+      const semesterValueRaw = firstRow.semester ?? firstRow.학기 ?? firstRow.term
+      const levelValueRaw = firstRow.level ?? firstRow.레벨
+      const gradeValueRaw = firstRow.grade ?? firstRow.학년 ?? ""
+
+      const semesterValue = semesterValueRaw !== undefined && semesterValueRaw !== null
+        ? String(semesterValueRaw).trim()
+        : ""
+      const levelValue = levelValueRaw !== undefined && levelValueRaw !== null
+        ? String(levelValueRaw).trim()
+        : ""
+      const gradeValue = gradeValueRaw !== undefined && gradeValueRaw !== null
+        ? String(gradeValueRaw).trim()
+        : ""
+
+      const semesterCode = semesterCodes.find((c) => c.value === semesterValue)
+      const levelCode = levelCodes.find((c) => c.value === levelValue)
+      const normalizedGradeValue =
+        gradeValue && gradeValue !== "none" && gradeValue !== "없음" ? gradeValue : ""
+      const gradeCode = normalizedGradeValue
+        ? gradeCodes.find((c) => c.value === normalizedGradeValue)
+        : null
+
+      const effectiveSemesterId = semesterCode?.id || ""
+      const effectiveLevelId = levelCode?.id || ""
+      const effectiveGradeId = gradeCode?.id || ""
+
+      if (!semesterCode || !levelCode) {
+        const metaErrors: Array<{ row: number; reason: string }> = []
+        if (!semesterCode) {
+          metaErrors.push({ row: 2, reason: `학기 '${semesterValue}' 코드를 찾을 수 없습니다.` })
+        }
+        if (!levelCode) {
+          metaErrors.push({ row: 2, reason: `레벨 '${levelValue}' 코드를 찾을 수 없습니다.` })
+        }
+        const errorMsg = metaErrors.map((e) => `행 ${e.row}: ${e.reason}`).join("\n")
+        toast({
+          title: "오류",
+          description: `조건이 맞지 않습니다.\n${errorMsg}`,
+          variant: "destructive",
+        })
+        return
+      }
+
+      // 템플릿에 따라 드롭다운 값도 세팅합니다.
+      setFormData((prev) => ({
+        ...prev,
+        type: effectiveType,
+        semesterId: effectiveSemesterId,
+        levelId: effectiveLevelId,
+        gradeId: effectiveGradeId,
+      }))
+
       for (let i = 0; i < data.length; i++) {
         const row = data[i]
         const rowNum = i + 2
 
-        // 타입 검증
-        if (row.type !== formData.type) {
+        // 템플릿 메타(학기/레벨)는 모든 행에서 동일해야 합니다.
+        const rowSemesterValue = row.semester ?? row.학기 ?? row.term
+        const rowLevelValue = row.level ?? row.레벨
+        const rowGradeValue = row.grade ?? row.학년 ?? ""
+
+        if (rowSemesterValue && String(rowSemesterValue).trim() !== semesterValue) {
           errors.push({
             row: rowNum,
-            reason: `타입이 학습 타입(${formData.type})과 일치하지 않습니다.`,
+            reason: `학기 값이 일치하지 않습니다. (기대값: ${semesterValue})`,
+          })
+          continue
+        }
+
+        if (rowLevelValue && String(rowLevelValue).trim() !== levelValue) {
+          errors.push({
+            row: rowNum,
+            reason: `레벨 값이 일치하지 않습니다. (기대값: ${levelValue})`,
+          })
+          continue
+        }
+
+        const normalizedRowGradeValue =
+          rowGradeValue && rowGradeValue !== "none" && rowGradeValue !== "없음"
+            ? String(rowGradeValue).trim()
+            : ""
+
+        const normalizedTemplateGradeValue =
+          gradeValue && gradeValue !== "none" && gradeValue !== "없음"
+            ? String(gradeValue).trim()
+            : ""
+
+        if (normalizedTemplateGradeValue !== normalizedRowGradeValue) {
+          errors.push({
+            row: rowNum,
+            reason: `학년 값이 일치하지 않습니다. (기대값: ${normalizedTemplateGradeValue || "없음"})`,
+          })
+          continue
+        }
+
+        // 타입 검증
+        if (row.type !== effectiveType) {
+          errors.push({
+            row: rowNum,
+            reason: `타입이 학습 타입(${effectiveType})과 일치하지 않습니다.`,
           })
           continue
         }
 
         // TYPE_A 검증: image_url 비어있어야 함
-        if (formData.type === "TYPE_A" && row.image_url) {
+        if (effectiveType === "TYPE_A" && row.image_url) {
           errors.push({
             row: rowNum,
             reason: "TYPE_A는 image_url이 비어있어야 합니다.",
@@ -422,7 +532,7 @@ export function LearningManagement({
         }
 
         // TYPE_B 검증: image_url 필요
-        if (formData.type === "TYPE_B" && !row.image_url) {
+        if (effectiveType === "TYPE_B" && !row.image_url) {
           errors.push({
             row: rowNum,
             reason: "TYPE_B는 image_url이 필요합니다.",
@@ -494,6 +604,7 @@ export function LearningManagement({
     setEditFormData({
       title: module.title,
       type: module.type,
+      semesterId: module.semester?.id || (semesterCodes[0]?.id ?? ""),
       levelId: module.level.id,
       gradeId: module.grade?.id || "",
       memo: module.memo || "",
@@ -521,10 +632,10 @@ export function LearningManagement({
   const handleUpdateModule = async () => {
     if (!editingModule) return
 
-    if (!editFormData.title || !editFormData.levelId) {
+    if (!editFormData.title || !editFormData.semesterId || !editFormData.levelId) {
       toast({
         title: "오류",
-        description: "제목과 레벨은 필수입니다.",
+        description: "제목과 학기, 레벨은 필수입니다.",
         variant: "destructive",
       })
       return
@@ -651,6 +762,7 @@ export function LearningManagement({
         body: JSON.stringify({
           title: editFormData.title,
           type: editFormData.type,
+          semesterId: editFormData.semesterId,
           levelId: editFormData.levelId,
           gradeId: editFormData.gradeId && editFormData.gradeId !== "none" ? editFormData.gradeId : null,
           memo: editFormData.memo || null,
@@ -720,6 +832,24 @@ export function LearningManagement({
                   <SelectContent>
                     <SelectItem value="TYPE_A">단어+뜻</SelectItem>
                     <SelectItem value="TYPE_B">그림+단어+뜻</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>학기 *</Label>
+                <Select
+                  value={formData.semesterId}
+                  onValueChange={(v) => setFormData({ ...formData, semesterId: v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="학기 선택" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {semesterCodes.map((code) => (
+                      <SelectItem key={code.id} value={code.id}>
+                        {code.value}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -813,7 +943,7 @@ export function LearningManagement({
                       onChange={handleExcelUpload}
                     />
                     <p className="text-sm text-muted-foreground mt-2">
-                      컬럼: type, word_text, image_url (TYPE_B만), choice1, choice2, choice3, choice4, correct_index (0: 보기1, 1: 보기2, 2: 보기3, 3: 보기4)
+                      컬럼: type, semester, level, grade(없음 허용), word_text, image_url (TYPE_B만), choice1, choice2, choice3, choice4, correct_index (0: 보기1, 1: 보기2, 2: 보기3, 3: 보기4)
                     </p>
                   </div>
                 )}
@@ -956,6 +1086,7 @@ export function LearningManagement({
               <TableRow>
                 <TableHead>제목</TableHead>
                 <TableHead>타입</TableHead>
+                <TableHead>학기</TableHead>
                 <TableHead>레벨</TableHead>
                 <TableHead>학년</TableHead>
                 <TableHead>문항 수</TableHead>
@@ -970,6 +1101,7 @@ export function LearningManagement({
                   <TableCell>
                     {module.type === "TYPE_A" ? "단어+뜻" : "그림+단어+뜻"}
                   </TableCell>
+                  <TableCell>{module.semester?.value || "-"}</TableCell>
                   <TableCell>{module.level.value}</TableCell>
                   <TableCell>{module.grade?.value || "-"}</TableCell>
                   <TableCell>{module.items.length}</TableCell>
@@ -1028,6 +1160,24 @@ export function LearningManagement({
                     <SelectContent>
                       <SelectItem value="TYPE_A">단어+뜻</SelectItem>
                       <SelectItem value="TYPE_B">그림+단어+뜻</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>학기 *</Label>
+                  <Select
+                    value={editFormData.semesterId}
+                    onValueChange={(v) => setEditFormData({ ...editFormData, semesterId: v })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="학기 선택" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {semesterCodes.map((code) => (
+                        <SelectItem key={code.id} value={code.id}>
+                          {code.value}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>

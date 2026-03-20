@@ -6,7 +6,7 @@ CREATE TYPE "UserRole" AS ENUM ('SUPER_ADMIN', 'MANAGER', 'STUDENT');
 CREATE TYPE "StudentStatus" AS ENUM ('ACTIVE', 'INACTIVE');
 CREATE TYPE "LearningType" AS ENUM ('FLASHCARD', 'QUIZ');
 CREATE TYPE "SessionStatus" AS ENUM ('IN_PROGRESS', 'COMPLETED', 'ABANDONED');
-CREATE TYPE "CodeCategory" AS ENUM ('GRADE', 'LEVEL');
+CREATE TYPE "CodeCategory" AS ENUM ('GRADE', 'LEVEL', 'SEMESTER');
 
 -- 2. 기본 테이블 생성 (의존성 없는 테이블부터)
 
@@ -149,6 +149,7 @@ CREATE TABLE "LearningModule" (
     "id" TEXT NOT NULL,
     "title" TEXT NOT NULL,
     "type" "LearningType" NOT NULL,
+    "semesterId" TEXT,
     "levelId" TEXT NOT NULL,
     "gradeId" TEXT,
     "memo" TEXT,
@@ -158,9 +159,11 @@ CREATE TABLE "LearningModule" (
     CONSTRAINT "LearningModule_pkey" PRIMARY KEY ("id")
 );
 
+CREATE INDEX "LearningModule_semesterId_idx" ON "LearningModule"("semesterId");
 CREATE INDEX "LearningModule_levelId_idx" ON "LearningModule"("levelId");
 CREATE INDEX "LearningModule_gradeId_idx" ON "LearningModule"("gradeId");
 
+ALTER TABLE "LearningModule" ADD CONSTRAINT "LearningModule_semesterId_fkey" FOREIGN KEY ("semesterId") REFERENCES "Code"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 ALTER TABLE "LearningModule" ADD CONSTRAINT "LearningModule_levelId_fkey" FOREIGN KEY ("levelId") REFERENCES "Code"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "LearningModule" ADD CONSTRAINT "LearningModule_gradeId_fkey" FOREIGN KEY ("gradeId") REFERENCES "Code"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 

@@ -12,7 +12,7 @@ export default async function LearningPage() {
     return null
   }
 
-    let modules: (LearningModule & { level: Code; grade: Code | null; items: LearningItem[] })[] = []
+    let modules: (LearningModule & { level: Code; semester: Code | null; grade: Code | null; items: LearningItem[] })[] = []
     let codes: Code[] = []
     
     try {
@@ -20,6 +20,7 @@ export default async function LearningPage() {
         prisma.learningModule.findMany({
           include: {
             level: true,
+            semester: true,
             grade: true,
             items: {
               orderBy: { order: "asc" },

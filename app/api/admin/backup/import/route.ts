@@ -192,6 +192,7 @@ export async function POST(request: Request) {
               id: module.id,
               title: module.title,
               type: module.type,
+              semesterId: module.semesterId,
               levelId: module.levelId,
               gradeId: module.gradeId,
               memo: module.memo,

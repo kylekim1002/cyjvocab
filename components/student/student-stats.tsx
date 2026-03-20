@@ -29,7 +29,7 @@ export function StudentStats({
 }: StudentStatsProps) {
   return (
     <div className="container mx-auto p-4 space-y-4">
-      <h1 className="text-2xl font-bold">통계</h1>
+      <h1 className="text-2xl font-bold">점수</h1>
 
       <div className="grid gap-4 md:grid-cols-3">
         <Card>

@@ -24,6 +24,11 @@ async function main() {
     { category: 'LEVEL' as const, value: 'Level 5', order: 5 },
   ]
 
+  const semesters = [
+    { category: 'SEMESTER' as const, value: '1학기', order: 1 },
+    { category: 'SEMESTER' as const, value: '2학기', order: 2 },
+  ]
+
   for (const grade of grades) {
     await prisma.code.upsert({
       where: { category_value: { category: grade.category, value: grade.value } },
@@ -37,6 +42,14 @@ async function main() {
       where: { category_value: { category: level.category, value: level.value } },
       update: {},
       create: level,
+    })
+  }
+
+  for (const semester of semesters) {
+    await prisma.code.upsert({
+      where: { category_value: { category: semester.category, value: semester.value } },
+      update: {},
+      create: semester,
     })
   }
 
@@ -71,13 +84,18 @@ async function main() {
     where: { category: 'GRADE', value: '1학년' },
   })
 
-  if (level1Code && grade1Code) {
+  const semester1Code = await prisma.code.findFirst({
+    where: { category: 'SEMESTER', value: '1학기' },
+  })
+
+  if (level1Code && grade1Code && semester1Code) {
     // 플래시카드 학습
     const flashcardModule = await prisma.learningModule.create({
       data: {
         title: '기초 단어 1',
         type: 'TYPE_A' as const,
         levelId: level1Code.id,
+        semesterId: semester1Code.id,
         gradeId: grade1Code.id,
         memo: '기초 단어 학습',
         items: {
@@ -117,6 +135,7 @@ async function main() {
         title: '기초 퀴즈 1',
         type: 'TYPE_B' as const,
         levelId: level1Code.id,
+        semesterId: semester1Code.id,
         gradeId: grade1Code.id,
         memo: '기초 퀴즈',
         items: {

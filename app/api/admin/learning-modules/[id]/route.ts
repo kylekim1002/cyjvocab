@@ -15,11 +15,11 @@ export async function PATCH(
   }
 
   try {
-    const { title, type, levelId, gradeId, memo, items } = await request.json()
+    const { title, type, semesterId, levelId, gradeId, memo, items } = await request.json()
 
-    if (!title || !title.trim() || !type || !levelId) {
+    if (!title || !title.trim() || !type || !semesterId || !levelId) {
       return NextResponse.json(
-        { error: "제목, 타입, 레벨은 필수입니다." },
+        { error: "제목, 타입, 학기, 레벨은 필수입니다." },
         { status: 400 }
       )
     }
@@ -43,6 +43,17 @@ export async function PATCH(
     if (!levelCode || levelCode.category !== "LEVEL") {
       return NextResponse.json(
         { error: "레벨 코드를 찾을 수 없습니다." },
+        { status: 400 }
+      )
+    }
+
+    // 학기 코드 검증
+    const semesterCode = await prisma.code.findUnique({
+      where: { id: semesterId },
+    })
+    if (!semesterCode || semesterCode.category !== "SEMESTER") {
+      return NextResponse.json(
+        { error: "학기 코드를 찾을 수 없습니다." },
         { status: 400 }
       )
     }
@@ -132,6 +143,7 @@ export async function PATCH(
       data: {
         title: title.trim(),
         type: learningType,
+        semesterId,
         levelId,
         gradeId: finalGradeId,
         memo: memo?.trim() || null,
@@ -153,6 +165,7 @@ export async function PATCH(
       },
       include: {
         level: true,
+        semester: true,
         grade: true,
         items: {
           orderBy: { order: "asc" },
@@ -165,7 +178,7 @@ export async function PATCH(
     console.error("Update module error:", error)
     if (error.code === "P2003") {
       return NextResponse.json(
-        { error: "레벨 또는 학년 코드를 찾을 수 없습니다." },
+        { error: "학기, 레벨 또는 학년 코드를 찾을 수 없습니다." },
         { status: 400 }
       )
     }

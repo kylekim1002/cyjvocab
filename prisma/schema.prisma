@@ -35,6 +35,7 @@ enum SessionStatus {
 enum CodeCategory {
   GRADE
   LEVEL
+  SEMESTER
 }
 
 model User {
@@ -100,6 +101,7 @@ model Code {
   studentLevels  Student[]        @relation("StudentLevel")
   learningLevels  LearningModule[] @relation("LearningLevel")
   learningGrades   LearningModule[] @relation("LearningGrade")
+  learningSemesters LearningModule[] @relation("LearningSemester")
 
   @@unique([category, value])
   @@index([category, order])
@@ -187,12 +189,14 @@ model LearningModule {
   title     String
   type      LearningType
   levelId   String
+  semesterId String?
   gradeId   String?
   memo      String?
   createdAt DateTime      @default(now())
   updatedAt DateTime      @updatedAt
 
   level     Code          @relation("LearningLevel", fields: [levelId], references: [id])
+  semester  Code?         @relation("LearningSemester", fields: [semesterId], references: [id], onDelete: SetNull)
   grade     Code?         @relation("LearningGrade", fields: [gradeId], references: [id], onDelete: SetNull)
   items     LearningItem[]
   assignments ClassAssignmentModule[]
@@ -202,6 +206,7 @@ model LearningModule {
   learningAttempts StudentLearningAttempt[]
 
   @@index([levelId])
+  @@index([semesterId])
   @@index([gradeId])
 }
 

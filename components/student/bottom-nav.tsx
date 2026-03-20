@@ -7,12 +7,12 @@ import { BookOpen, BarChart3, Settings } from "lucide-react"
 
 const navItems = [
   {
-    title: "단어",
+    title: "학습",
     href: "/student",
     icon: BookOpen,
   },
   {
-    title: "통계",
+    title: "점수",
     href: "/student/stats",
     icon: BarChart3,
   },

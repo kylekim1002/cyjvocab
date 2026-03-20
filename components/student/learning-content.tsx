@@ -133,22 +133,10 @@ export function LearningContent({
           }).catch(console.error)
         }
       }
-      // 완료된 학습도 다시 시작할 수 있도록 항상 새 세션으로 시작
-      // 완료된 학습이고 completedSession이 있으면 결과 다이얼로그 표시
-      // 단, completedSession의 phase가 현재 phase와 일치하는 경우만
-      if (completedSession && !showResultDialog) {
-        const sessionPayload = completedSession.payloadJson as any
-        const sessionPhase = sessionPayload?.phase || "test"
-        // 현재 phase와 일치하는 세션만 표시
-        if (sessionPhase === phase) {
-          const answers = sessionPayload?.quizAnswers || {}
-          setCompletedScore(completedSession.score)
-          setCompletedAnswers(answers)
-          setShowResultDialog(true)
-        }
-      }
-      // 세션이 없으면 새 세션 시작
-      if (!sessionId) {
+      // 완료된 테스트 재접속 케이스:
+      // completedSession이 있으면 사용자가 "다시보기(예/아니요)"를 선택하기 전까지
+      // 자동으로 세션을 시작하거나 결과 다이얼로그를 띄우지 않습니다.
+      if (!sessionId && !completedSession) {
         startNewSession()
       }
     }
@@ -808,13 +796,13 @@ export function LearningContent({
                 다시보기
               </Button>
               <Button onClick={() => router.push("/student")} variant="outline" className="w-full max-w-xs">
-                홈으로
+                닫기
               </Button>
             </div>
           </CardContent>
         </Card>
 
-        <Dialog open={showRestartConfirm} onOpenChange={setShowRestartConfirm}>
+        <Dialog open={showRestartConfirm}>
           <DialogContent className="max-w-md">
             <DialogHeader>
               <DialogTitle>다시보기</DialogTitle>
