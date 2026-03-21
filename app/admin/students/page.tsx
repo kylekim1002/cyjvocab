@@ -19,6 +19,9 @@ export default async function StudentsPage() {
       campus: { id: string; name: string } | null;
       grade: { id: string; value: string } | null;
       level: { id: string; value: string } | null;
+      studentClasses?: Array<{
+        class: { id: string; name: string }
+      }>
     })[] = []
 
     try {
@@ -62,6 +65,24 @@ export default async function StudentsPage() {
                 value: true,
               },
             },
+            studentClasses: {
+              where: {
+                endAt: null,
+              },
+              select: {
+                class: {
+                  select: {
+                    id: true,
+                    name: true,
+                    teacher: {
+                      select: {
+                        name: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
           },
           orderBy: { createdAt: "desc" },
         }),
@@ -94,7 +115,8 @@ export default async function StudentsPage() {
         campuses={campuses} 
         gradeCodes={gradeCodes}
         levelCodes={levelCodes}
-          initialStudents={transformedStudents}
+        initialStudents={transformedStudents}
+        role={session.user.role}
       />
     </div>
   )

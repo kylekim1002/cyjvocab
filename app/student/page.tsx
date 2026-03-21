@@ -50,6 +50,20 @@ export default async function StudentHomePage() {
     )
   }
 
+  // 학기/레벨 코드값(학생이 직접 추가할 때 사용할 드롭다운 데이터)
+  const [semesterCodes, levelCodes] = await Promise.all([
+    prisma.code.findMany({
+      where: { category: "SEMESTER" },
+      orderBy: { order: "asc" },
+      select: { id: true, value: true, category: true },
+    }),
+    prisma.code.findMany({
+      where: { category: "LEVEL" },
+      orderBy: { order: "asc" },
+      select: { id: true, value: true, category: true },
+    }),
+  ])
+
   // 현재 배정된 클래스 ID 목록
   const currentClassIds = student.studentClasses.map((sc) => sc.classId)
 
@@ -131,5 +145,17 @@ export default async function StudentHomePage() {
 
   const assignments = Array.from(assignmentMap.values())
 
-  return <StudentHomeContent assignments={assignments} />
+  // 학기·레벨 드롭다운은 코드 전체를 보여 검색·탐색이 가능하게 함.
+  // 실제 배정은 POST /api/student/calendar/assignments/add 에서
+  // 선택 레벨과 일치하는 학생 클래스가 있는지 검증함.
+  const filteredSemesterCodes = semesterCodes.map((c) => ({ id: c.id, value: c.value }))
+  const filteredLevelCodesNormalized = levelCodes.map((c) => ({ id: c.id, value: c.value }))
+
+  return (
+    <StudentHomeContent
+      assignments={assignments}
+      semesterCodes={filteredSemesterCodes}
+      levelCodes={filteredLevelCodesNormalized}
+    />
+  )
 }

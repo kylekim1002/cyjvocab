@@ -7,6 +7,7 @@ CREATE TYPE "StudentStatus" AS ENUM ('ACTIVE', 'INACTIVE');
 CREATE TYPE "LearningType" AS ENUM ('FLASHCARD', 'QUIZ');
 CREATE TYPE "SessionStatus" AS ENUM ('IN_PROGRESS', 'COMPLETED', 'ABANDONED');
 CREATE TYPE "CodeCategory" AS ENUM ('GRADE', 'LEVEL', 'SEMESTER');
+CREATE TYPE "AssignmentModuleSource" AS ENUM ('TEACHER', 'STUDENT');
 
 -- 2. 기본 테이블 생성 (의존성 없는 테이블부터)
 
@@ -153,6 +154,7 @@ CREATE TABLE "LearningModule" (
     "levelId" TEXT NOT NULL,
     "gradeId" TEXT,
     "memo" TEXT,
+    "status" "StudentStatus" NOT NULL DEFAULT 'ACTIVE',
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -205,6 +207,7 @@ CREATE TABLE "ClassAssignmentModule" (
     "assignmentId" TEXT NOT NULL,
     "moduleId" TEXT NOT NULL,
     "order" INTEGER NOT NULL,
+    "source" "AssignmentModuleSource" NOT NULL DEFAULT 'TEACHER',
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "ClassAssignmentModule_pkey" PRIMARY KEY ("id")

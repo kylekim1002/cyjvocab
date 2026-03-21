@@ -163,6 +163,7 @@ export async function POST(
             assignmentId: assignment!.id,
             moduleId,
             order: maxOrder + index + 1,
+            source: "TEACHER",
           })),
         })
       }

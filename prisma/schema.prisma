@@ -38,6 +38,11 @@ enum CodeCategory {
   SEMESTER
 }
 
+enum AssignmentModuleSource {
+  TEACHER
+  STUDENT
+}
+
 model User {
   id            String    @id @default(cuid())
   username      String    @unique
@@ -192,6 +197,7 @@ model LearningModule {
   semesterId String?
   gradeId   String?
   memo      String?
+  status    StudentStatus @default(ACTIVE)
   createdAt DateTime      @default(now())
   updatedAt DateTime      @updatedAt
 
@@ -244,6 +250,7 @@ model ClassAssignmentModule {
   assignmentId String
   moduleId     String
   order        Int
+  source       AssignmentModuleSource @default(TEACHER)
   createdAt    DateTime @default(now())
 
   assignment   ClassAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)

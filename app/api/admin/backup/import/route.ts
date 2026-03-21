@@ -243,6 +243,8 @@ export async function POST(request: Request) {
               assignmentId: cam.assignmentId,
               moduleId: cam.moduleId,
               order: cam.order,
+              // 백업 파일에 source가 없을 수 있으므로 기본값은 TEACHER
+              source: (cam as any).source ?? "TEACHER",
               createdAt: new Date(cam.createdAt),
             },
           })

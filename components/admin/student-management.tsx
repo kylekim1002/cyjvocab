@@ -34,6 +34,14 @@ interface Student {
     id: string
     name: string
   }
+  studentClasses?: Array<{
+    class: {
+      name: string
+      teacher?: {
+        name: string | null
+      } | null
+    }
+  }>
   grade: {
     id: string
     value: string
@@ -52,6 +60,7 @@ interface StudentManagementProps {
   gradeCodes: Code[]
   levelCodes: Code[]
   initialStudents: Student[]
+  role: "SUPER_ADMIN" | "MANAGER"
 }
 
 export function StudentManagement({
@@ -59,6 +68,7 @@ export function StudentManagement({
   gradeCodes,
   levelCodes,
   initialStudents,
+  role,
 }: StudentManagementProps) {
   const { toast } = useToast()
   const router = useRouter()
@@ -67,6 +77,8 @@ export function StudentManagement({
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [editingStudent, setEditingStudent] = useState<Student | null>(null)
   const [students, setStudents] = useState(initialStudents || [])
+  const [isResettingAllStudents, setIsResettingAllStudents] = useState(false)
+  const [deletingStudentUsernames, setDeletingStudentUsernames] = useState<Record<string, boolean>>({})
   
   // 서버에서 최신 데이터 가져오기 (성공하고 데이터가 있을 때만 업데이트)
   const refreshStudents = async () => {
@@ -180,7 +192,13 @@ export function StudentManagement({
 
       toast({
         title: "성공",
-        description: `등록 완료 (${data.count}명)`,
+        description: (() => {
+          const count = typeof data.count === "number" ? data.count : 0
+          const skipped = typeof data.skippedDuplicateCount === "number" ? data.skippedDuplicateCount : 0
+          return skipped > 0
+            ? `등록 완료 (${count}명), 중복 제외 ${skipped}명`
+            : `등록 완료 (${count}명)`
+        })(),
       })
       
       // 학생 목록 새로고침
@@ -460,6 +478,26 @@ export function StudentManagement({
             )
           }
           break
+        case "반명":
+          if (filterValue.trim()) {
+            const searchValue = filterValue.trim().toLowerCase()
+            filtered = filtered.filter((s) =>
+              (s.studentClasses || []).some((sc) =>
+                (sc.class?.name || "").toLowerCase().includes(searchValue)
+              )
+            )
+          }
+          break
+        case "선생님":
+          if (filterValue.trim()) {
+            const searchValue = filterValue.trim().toLowerCase()
+            filtered = filtered.filter((s) =>
+              (s.studentClasses || []).some((sc) =>
+                (sc.class?.teacher?.name || "").toLowerCase().includes(searchValue)
+              )
+            )
+          }
+          break
         case "학년":
           if (filterCodeId) {
             filtered = filtered.filter((s) => s.grade?.id === filterCodeId)
@@ -490,6 +528,106 @@ export function StudentManagement({
     setFilterType(value)
     setFilterValue("")
     setFilterCodeId("")
+  }
+
+  // 학생 전체 초기화 (SUPER_ADMIN만)
+  const handleResetAllStudents = async () => {
+    if (role !== "SUPER_ADMIN") {
+      toast({
+        title: "권한이 없습니다.",
+        description: "학생 전체 초기화는 최고관리자만 가능합니다.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    // 요청사항: 3번 확인
+    const ok1 = confirm("삭제하시겠습니까?")
+    if (!ok1) return
+    const ok2 = confirm("정말 삭제 하시겠습니까?")
+    if (!ok2) return
+    const ok3 = confirm("모든 학생데이터가 삭제됩니다?")
+    if (!ok3) return
+
+    setIsResettingAllStudents(true)
+    try {
+      const response = await fetch("/api/admin/students/reset", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      })
+
+      if (!response.ok) {
+        const contentType = response.headers.get("content-type")
+        if (contentType && contentType.includes("application/json")) {
+          const error = await response.json()
+          throw new Error(error.error || "초기화 실패")
+        }
+        const text = await response.text()
+        throw new Error(text || "초기화 실패")
+      }
+
+      toast({
+        title: "성공",
+        description: "모든 학생 데이터가 삭제되었습니다.",
+      })
+
+      // 즉시 UI 반영 후 서버 새로고침
+      setStudents([])
+      setFilteredStudents([])
+      router.refresh()
+    } catch (error: any) {
+      toast({
+        title: "오류",
+        description: error?.message || "학생 전체 초기화에 실패했습니다.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsResettingAllStudents(false)
+    }
+  }
+
+  // 개별 학생 삭제 (관리자도 가능)
+  const handleDeleteStudent = async (student: Student) => {
+    const username = student.username
+    if (!username) return
+
+    // 요청사항: 1번만 확인
+    const ok = confirm("삭제하시겠습니까?")
+    if (!ok) return
+
+    setDeletingStudentUsernames((prev) => ({ ...prev, [username]: true }))
+    try {
+      const response = await fetch(`/api/admin/students/${username}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ studentId: student.id }),
+      })
+
+      if (!response.ok) {
+        const contentType = response.headers.get("content-type")
+        if (contentType && contentType.includes("application/json")) {
+          const error = await response.json()
+          throw new Error(error.error || "삭제 실패")
+        }
+        const text = await response.text()
+        throw new Error(text || "삭제 실패")
+      }
+
+      toast({
+        title: "성공",
+        description: `${student.name} 학생이 삭제되었습니다.`,
+      })
+
+      router.refresh()
+    } catch (error: any) {
+      toast({
+        title: "오류",
+        description: error?.message || "학생 삭제에 실패했습니다.",
+        variant: "destructive",
+      })
+    } finally {
+      setDeletingStudentUsernames((prev) => ({ ...prev, [username]: false }))
+    }
   }
 
   // 학생 수정 다이얼로그 열기
@@ -787,8 +925,18 @@ export function StudentManagement({
       </Card>
 
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between gap-4">
           <CardTitle>학생 목록</CardTitle>
+          {role === "SUPER_ADMIN" && (
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={handleResetAllStudents}
+              disabled={isResettingAllStudents}
+            >
+              {isResettingAllStudents ? "학생전체초기화 중..." : "학생전체초기화"}
+            </Button>
+          )}
         </CardHeader>
         <CardContent className="space-y-4">
           {/* 필터링 UI */}
@@ -825,6 +973,8 @@ export function StudentManagement({
                 <SelectContent>
                   <SelectItem value="전체">전체</SelectItem>
                   <SelectItem value="이름">이름</SelectItem>
+                  <SelectItem value="반명">반명</SelectItem>
+                  <SelectItem value="선생님">선생님</SelectItem>
                   <SelectItem value="학년">학년</SelectItem>
                   <SelectItem value="레벨">레벨</SelectItem>
                 </SelectContent>
@@ -833,13 +983,17 @@ export function StudentManagement({
             {filterType !== "전체" && (
               <div className="flex-1">
                 <Label>
-                  {filterType === "이름" ? "검색어" : filterType === "학년" ? "학년 선택" : "레벨 선택"}
+                  {filterType === "이름" || filterType === "반명" || filterType === "선생님"
+                    ? "검색어"
+                    : filterType === "학년"
+                      ? "학년 선택"
+                      : "레벨 선택"}
                 </Label>
-                {filterType === "이름" ? (
+                {filterType === "이름" || filterType === "반명" || filterType === "선생님" ? (
                   <Input
                     value={filterValue}
                     onChange={(e) => setFilterValue(e.target.value)}
-                    placeholder="이름 입력"
+                    placeholder={filterType === "이름" ? "이름 입력" : filterType === "반명" ? "반명 입력" : "선생님 입력"}
                     disabled={!filterCampusId || filterCampusId === "all"}
                   />
                 ) : filterType === "학년" ? (
@@ -886,7 +1040,7 @@ export function StudentManagement({
                   !filterCampusId || 
                   filterCampusId === "all" ||
                   (filterType !== "전체" && 
-                   ((filterType === "이름" && !filterValue.trim()) ||
+                   (((filterType === "이름" || filterType === "반명" || filterType === "선생님") && !filterValue.trim()) ||
                     ((filterType === "학년" || filterType === "레벨") && !filterCodeId)))
                 }
               >
@@ -903,9 +1057,11 @@ export function StudentManagement({
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead>캠퍼스</TableHead>
                   <TableHead>이름</TableHead>
                   <TableHead>숫자4자리</TableHead>
-                  <TableHead>캠퍼스</TableHead>
+                  <TableHead>반명</TableHead>
+                  <TableHead>선생님</TableHead>
                   <TableHead>학년</TableHead>
                   <TableHead>레벨</TableHead>
                   <TableHead>학교</TableHead>
@@ -918,7 +1074,7 @@ export function StudentManagement({
               <TableBody>
                 {filteredStudents.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={10} className="text-center text-muted-foreground">
+                    <TableCell colSpan={12} className="text-center text-muted-foreground">
                       {students.length === 0
                         ? "등록된 학생이 없습니다."
                         : "조건에 맞는 학생이 없습니다."}
@@ -927,9 +1083,31 @@ export function StudentManagement({
                 ) : (
                   filteredStudents.map((student) => (
                     <TableRow key={student.id}>
+                      <TableCell>{student.campus.name}</TableCell>
                       <TableCell className="font-medium">{student.name}</TableCell>
                       <TableCell>{student.username}</TableCell>
-                      <TableCell>{student.campus.name}</TableCell>
+                      <TableCell>
+                        {student.studentClasses && student.studentClasses.length > 0
+                          ? Array.from(
+                              new Set(
+                                student.studentClasses
+                                  .map((sc) => sc.class?.name)
+                                  .filter(Boolean)
+                              )
+                            ).join(", ")
+                          : "-"}
+                      </TableCell>
+                      <TableCell>
+                        {student.studentClasses && student.studentClasses.length > 0
+                          ? Array.from(
+                              new Set(
+                                student.studentClasses
+                                  .map((sc) => sc.class?.teacher?.name)
+                                  .filter(Boolean)
+                              )
+                            ).join(", ")
+                          : "-"}
+                      </TableCell>
                       <TableCell>{student.grade?.value || "-"}</TableCell>
                       <TableCell>{student.level?.value || "-"}</TableCell>
                       <TableCell>{student.school || "-"}</TableCell>
@@ -1014,8 +1192,16 @@ export function StudentManagement({
                           size="sm"
                           onClick={() => handleOpenEditDialog(student)}
                         >
-                          <Edit className="h-3 w-3 mr-1" />
-                          수정
+                          <Edit className="h-3 w-3" />
+                        </Button>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          className="ml-2"
+                          onClick={() => handleDeleteStudent(student)}
+                          disabled={!!deletingStudentUsernames[student.username]}
+                        >
+                          <Trash2 className="h-3 w-3" />
                         </Button>
                       </TableCell>
                     </TableRow>

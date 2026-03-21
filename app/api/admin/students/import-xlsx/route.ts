@@ -28,10 +28,11 @@ export async function POST(request: Request) {
     const workbook = XLSX.read(buffer, { type: "buffer" })
     const sheetName = workbook.SheetNames[0]
     const worksheet = workbook.Sheets[sheetName]
-    const data = XLSX.utils.sheet_to_json(worksheet) as any[]
+    const rows = XLSX.utils.sheet_to_json(worksheet) as any[]
 
     const errors: Array<{ row: number; reason: string }> = []
-    const successCount = 0
+    let createdCount = 0
+    let skippedDuplicateCount = 0
 
     // 캠퍼스 및 코드 조회
     const campuses = await prisma.campus.findMany()
@@ -42,8 +43,8 @@ export async function POST(request: Request) {
       where: { category: "LEVEL" },
     })
 
-    for (let i = 0; i < data.length; i++) {
-      const row = data[i]
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i]
       const rowNum = i + 2 // 헤더 제외
 
       try {
@@ -53,8 +54,14 @@ export async function POST(request: Request) {
           row.last4 ??
           row.username
 
+        const campusName = row.campus !== undefined && row.campus !== null ? String(row.campus).trim() : ""
+        const studentName = row.name !== undefined && row.name !== null ? String(row.name).trim() : ""
+        const gradeValue = row.grade !== undefined && row.grade !== null ? String(row.grade).trim() : ""
+        const last4 = phoneLast4 !== undefined && phoneLast4 !== null ? String(phoneLast4).trim() : ""
+        const school = row.school !== undefined && row.school !== null ? String(row.school).trim() : ""
+
         // 필수 필드 확인
-        if (!row.campus || !row.name || !row.grade || !phoneLast4) {
+        if (!campusName || !studentName || !gradeValue || !last4) {
           errors.push({
             row: rowNum,
             reason: "필수 필드가 누락되었습니다.",
@@ -63,21 +70,21 @@ export async function POST(request: Request) {
         }
 
         // 캠퍼스 확인
-        const campus = campuses.find((c) => c.name === row.campus)
+        const campus = campuses.find((c) => c.name === campusName)
         if (!campus) {
           errors.push({
             row: rowNum,
-            reason: `캠퍼스 '${row.campus}'를 찾을 수 없습니다.`,
+            reason: `캠퍼스 '${campusName}'를 찾을 수 없습니다.`,
           })
           continue
         }
 
         // 학년 코드 확인
-        const gradeCode = gradeCodes.find((c) => c.value === row.grade)
+        const gradeCode = gradeCodes.find((c) => c.value === gradeValue)
         if (!gradeCode) {
           errors.push({
             row: rowNum,
-            reason: `학년 '${row.grade}'를 찾을 수 없습니다.`,
+            reason: `학년 '${gradeValue}'를 찾을 수 없습니다.`,
           })
           continue
         }
@@ -97,9 +104,21 @@ export async function POST(request: Request) {
           levelId = levelCode.id
         }
 
+        // (요청사항) 이름 + 숫자4자리가 동일한 학생은 중복으로 보고 제외
+        const duplicate = await prisma.student.findFirst({
+          where: {
+            username: last4,
+            name: { equals: studentName, mode: "insensitive" },
+          },
+          select: { id: true },
+        })
+        if (duplicate) {
+          skippedDuplicateCount += 1
+          continue
+        }
+
         // 학생은 (이름 + 숫자4자리)로 로그인합니다.
         // User.username은 유니크 제약이 있으므로 내부용으로만 별도 값을 넣습니다.
-        const last4 = String(phoneLast4).trim()
         const hashedPassword = await bcrypt.hash(last4, 10)
         const internalUserUsername = `${last4}_${Date.now()}_${Math.random().toString(16).slice(2)}`
 
@@ -116,27 +135,29 @@ export async function POST(request: Request) {
               password: hashedPassword,
               role: "STUDENT",
               campusId: campus.id,
-              name: String(row.name),
+              name: studentName,
             },
           })
 
           await tx.student.create({
             data: {
               id: user.id,
-              name: String(row.name),
+              name: studentName,
               username: last4,
               password: hashedPassword,
               plainPassword: null,
               campusId: campus.id,
               gradeId: gradeCode.id,
               levelId,
-              school: row.school || null,
+              school: school ? school : null,
               status: "ACTIVE",
               autoLoginToken,
               autoLoginTokenExpiresAt: expiresAt,
             },
           })
         })
+
+        createdCount += 1
       } catch (error: any) {
         if (error.code === "P2002") {
           const phoneLast4ForError =
@@ -159,7 +180,8 @@ export async function POST(request: Request) {
         {
           error: "일부 행에서 오류가 발생했습니다.",
           errors,
-          successCount: data.length - errors.length,
+          createdCount,
+          skippedDuplicateCount,
         },
         { status: 400 }
       )
@@ -168,7 +190,8 @@ export async function POST(request: Request) {
     return NextResponse.json({
       success: true,
       message: "등록 완료",
-      count: data.length,
+      count: createdCount,
+      skippedDuplicateCount,
     })
   } catch (error) {
     console.error("Import error:", error)

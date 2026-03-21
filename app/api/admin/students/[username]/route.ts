@@ -136,3 +136,48 @@ export async function PATCH(
     )
   }
 }
+
+export async function DELETE(
+  request: Request,
+  { params }: { params: { username: string } }
+) {
+  const session = await getServerSession(authOptions)
+
+  if (!session || (session.user.role !== "SUPER_ADMIN" && session.user.role !== "MANAGER")) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
+
+  try {
+    const body = await request.json().catch(() => ({}))
+    const { studentId } = body as { studentId?: string }
+
+    if (!params.username) {
+      return NextResponse.json(
+        { error: "학생 숫자4자리가 필요합니다." },
+        { status: 400 }
+      )
+    }
+
+    const targetStudent = studentId
+      ? await prisma.student.findUnique({ where: { id: String(studentId) } })
+      : await prisma.student.findFirst({
+          where: { username: params.username },
+          orderBy: { createdAt: "desc" },
+        })
+
+    if (!targetStudent) {
+      return NextResponse.json({ error: "학생을 찾을 수 없습니다." }, { status: 404 })
+    }
+
+    // Student.id === User.id 이므로 User를 삭제하면 Student 및 학습/성적 데이터가 cascade로 정리됩니다.
+    await prisma.user.delete({ where: { id: targetStudent.id } })
+
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    console.error("Delete student error:", error)
+    return NextResponse.json(
+      { error: "학생 삭제에 실패했습니다." },
+      { status: 500 }
+    )
+  }
+}

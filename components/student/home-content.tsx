@@ -1,10 +1,15 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { useToast } from "@/components/ui/use-toast"
 
 interface Assignment {
   id: string
@@ -17,6 +22,7 @@ interface Assignment {
       type: string
     }
     order: number
+    source?: "TEACHER" | "STUDENT" | null
   }>
   progress: Array<{
     moduleId: string
@@ -27,6 +33,8 @@ interface Assignment {
 
 interface StudentHomeContentProps {
   assignments: Assignment[]
+  semesterCodes: Array<{ id: string; value: string }>
+  levelCodes: Array<{ id: string; value: string }>
 }
 
 type Phase = "wordlist" | "memorization" | "writing" | "test"
@@ -61,13 +69,29 @@ function getStartBadgeClass(phase: Phase) {
   }
 }
 
-export function StudentHomeContent({ assignments: initialAssignments }: StudentHomeContentProps) {
+export function StudentHomeContent({
+  assignments: initialAssignments,
+  semesterCodes,
+  levelCodes,
+}: StudentHomeContentProps) {
   const [selectedPhase, setSelectedPhase] = useState<Phase>("wordlist")
   const [monthCursor, setMonthCursor] = useState(() => {
     const now = new Date()
     return new Date(now.getFullYear(), now.getMonth(), 1)
   })
   const [selectedDateKey, setSelectedDateKey] = useState<string | null>(null)
+  const router = useRouter()
+
+  // 학습 추가 다이얼로그
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
+  const [selectedSemesterId, setSelectedSemesterId] = useState<string>("")
+  const [selectedLevelId, setSelectedLevelId] = useState<string>("")
+  const [searchQuery, setSearchQuery] = useState("")
+  const [moduleResults, setModuleResults] = useState<Array<{ id: string; title: string; type: string }>>([])
+  const [selectedModuleId, setSelectedModuleId] = useState<string>("")
+  const [isSearching, setIsSearching] = useState(false)
+  const [isAssigning, setIsAssigning] = useState(false)
+  const { toast } = useToast()
 
   const assignments = useMemo(
     () =>
@@ -104,6 +128,45 @@ export function StudentHomeContent({ assignments: initialAssignments }: StudentH
   }, [monthCursor])
 
   const selectedAssignments = selectedDateKey ? dateAssignmentsMap.get(selectedDateKey) || [] : []
+
+  // 다이얼로그 열릴 때 기본값 세팅
+  useEffect(() => {
+    if (!isAddDialogOpen) return
+    // 목록이 로딩되거나 값이 바뀌는 상황에서도 검색이 비지 않도록,
+    // 다이얼로그를 열 때마다 현재 데이터의 첫 항목으로 초기화합니다.
+    setSelectedSemesterId(semesterCodes[0]?.id || "")
+    setSelectedLevelId(levelCodes[0]?.id || "")
+    setSearchQuery("")
+    setSelectedModuleId("")
+    setModuleResults([])
+  }, [isAddDialogOpen, semesterCodes, levelCodes])
+
+  // 검색(학기/레벨/제목) 결과 조회
+  useEffect(() => {
+    if (!isAddDialogOpen) return
+    if (!selectedSemesterId || !selectedLevelId) return
+
+    const t = window.setTimeout(async () => {
+      try {
+        setIsSearching(true)
+        const url = new URL("/api/student/learning-modules/search", window.location.origin)
+        url.searchParams.set("semesterId", selectedSemesterId)
+        url.searchParams.set("levelId", selectedLevelId)
+        if (searchQuery.trim()) url.searchParams.set("q", searchQuery.trim())
+
+        const res = await fetch(url.toString())
+        if (!res.ok) throw new Error("학습 검색 실패")
+        const data = await res.json()
+        setModuleResults(Array.isArray(data) ? data : [])
+      } catch {
+        setModuleResults([])
+      } finally {
+        setIsSearching(false)
+      }
+    }, 300)
+
+    return () => window.clearTimeout(t)
+  }, [isAddDialogOpen, selectedSemesterId, selectedLevelId, searchQuery])
 
   return (
     <div className="mx-auto max-w-md px-4 py-4 pb-24 space-y-4">
@@ -205,29 +268,169 @@ export function StudentHomeContent({ assignments: initialAssignments }: StudentH
       </div>
 
       {selectedDateKey ? (
-        selectedAssignments.length > 0 ? (
-          <div className="space-y-3">
-            {selectedAssignments.flatMap((assignment) =>
-              assignment.modules.map((mod) => (
-                <div key={`${assignment.id}-${mod.module.id}`} className="rounded-xl border bg-white p-3">
-                  <p className="text-sm font-medium mb-2">{mod.module.title}</p>
-                  <Link href={`/student/learn/${assignment.id}/${mod.module.id}?phase=${selectedPhase}`}>
-                    <Button className="w-full">시작</Button>
-                  </Link>
-                </div>
-              ))
-            )}
+        <div className="space-y-3">
+          <div className="flex justify-end">
+            <Button variant="outline" onClick={() => setIsAddDialogOpen(true)}>
+              추가
+            </Button>
           </div>
-        ) : (
-          <div className="rounded-xl border bg-white p-4 text-sm text-muted-foreground">
-            선택한 날짜에는 학습이 없습니다.
-          </div>
-        )
+
+          {selectedAssignments.length > 0 ? (
+            <div className="space-y-3">
+              {selectedAssignments.flatMap((assignment) =>
+                assignment.modules.map((mod) => (
+                  <div key={`${assignment.id}-${mod.module.id}`} className="rounded-xl border bg-white p-3">
+                    <div className="flex items-center justify-between mb-2 gap-3">
+                      <p className="text-sm font-medium truncate">{mod.module.title}</p>
+                      <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">
+                        {mod.source === "STUDENT" ? "학생" : "선생님"}
+                      </span>
+                    </div>
+                    <Link href={`/student/learn/${assignment.id}/${mod.module.id}?phase=${selectedPhase}`}>
+                      <Button className="w-full">시작</Button>
+                    </Link>
+                  </div>
+                ))
+              )}
+            </div>
+          ) : (
+            <div className="rounded-xl border bg-white p-4 text-sm text-muted-foreground">
+              선택한 날짜에는 학습이 없습니다.
+            </div>
+          )}
+        </div>
       ) : (
         <div className="rounded-xl border bg-white p-4 text-sm text-muted-foreground">
           날짜를 선택하면 학습 시작 버튼이 표시됩니다.
         </div>
       )}
+
+      <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>학습 추가</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <div className="text-sm font-medium">학기 *</div>
+              <Select value={selectedSemesterId} onValueChange={setSelectedSemesterId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="학기 선택" />
+                </SelectTrigger>
+                <SelectContent>
+                  {semesterCodes.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.value}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <div className="text-sm font-medium">레벨 *</div>
+              <Select value={selectedLevelId} onValueChange={setSelectedLevelId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="레벨 선택" />
+                </SelectTrigger>
+                <SelectContent>
+                  {levelCodes.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.value}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <div className="text-sm font-medium">학습 제목 검색</div>
+              <Input
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="제목을 입력하세요"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <div className="text-sm font-medium">검색 결과</div>
+              <div className="max-h-48 overflow-y-auto rounded border bg-white">
+                {isSearching ? (
+                  <div className="p-3 text-sm text-muted-foreground">검색 중...</div>
+                ) : moduleResults.length === 0 ? (
+                  <div className="p-3 text-sm text-muted-foreground">결과가 없습니다.</div>
+                ) : (
+                  <div className="p-2 space-y-2">
+                    {moduleResults.map((m) => {
+                      const active = selectedModuleId === m.id
+                      return (
+                        <Button
+                          key={m.id}
+                          type="button"
+                          variant={active ? "default" : "outline"}
+                          className="w-full justify-start"
+                          onClick={() => setSelectedModuleId(m.id)}
+                        >
+                          {m.title}
+                        </Button>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex gap-2 justify-end">
+              <Button type="button" variant="outline" onClick={() => setIsAddDialogOpen(false)}>
+                닫기
+              </Button>
+              <Button
+                type="button"
+                disabled={!selectedDateKey || !selectedModuleId}
+                onClick={async () => {
+                  if (!selectedDateKey) return
+                  try {
+                    setIsAssigning(true)
+                    const res = await fetch("/api/student/calendar/assignments/add", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        date: selectedDateKey,
+                        semesterId: selectedSemesterId,
+                        levelId: selectedLevelId,
+                        moduleId: selectedModuleId,
+                      }),
+                    })
+                    if (!res.ok) {
+                      const errJson = await res.json().catch(() => null)
+                      throw new Error(errJson?.error || errJson?.message || "배정 실패")
+                    }
+                    setIsAddDialogOpen(false)
+                    router.refresh()
+                    toast({
+                      title: "배정 완료",
+                      description: "선택한 학습이 캘린더에 추가되었습니다.",
+                    })
+                  } catch (err: any) {
+                    toast({
+                      title: "배정 실패",
+                      description:
+                        err?.message ||
+                        "학습 배정에 실패했습니다. 입력 조건을 확인해주세요.",
+                      variant: "destructive",
+                    })
+                  } finally {
+                    setIsAssigning(false)
+                  }
+                }}
+              >
+                {isAssigning ? "배정 중..." : "배정"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

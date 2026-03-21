@@ -126,9 +126,26 @@ export async function POST(request: Request) {
     const trimmedCampusId = campusId.trim()
     const trimmedGradeId = gradeId.trim()
     const phoneLast4 = username.trim()
+    const studentName = name.trim()
     // User.username은 DB 유니크 제약이 있으므로 학생의 숫자4자리와 분리합니다.
     // 로그인은 Student.name + Student.username(숫자4자리)로 처리합니다.
     const internalUserUsername = `${phoneLast4}_${Date.now()}_${Math.random().toString(16).slice(2)}`
+
+    // (요청사항) 이름 + 숫자4자리가 동일한 학생이 이미 있으면 중복으로 보고 등록 차단
+    const existingStudent = await prisma.student.findFirst({
+      where: {
+        username: phoneLast4,
+        name: { equals: studentName, mode: "insensitive" },
+      },
+      select: { id: true },
+    })
+
+    if (existingStudent) {
+      return NextResponse.json(
+        { error: "이미 등록된 학생입니다. (이름 + 숫자4자리 중복)" },
+        { status: 409 }
+      )
+    }
 
     // 캠퍼스 존재 확인
     const campus = await prisma.campus.findUnique({
@@ -221,7 +238,7 @@ export async function POST(request: Request) {
       const student = await tx.student.create({
         data: {
           id: studentId,
-          name: name.trim(),
+          name: studentName,
           username: phoneLast4,
           password: hashedPassword,
           plainPassword: null,

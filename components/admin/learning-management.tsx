@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Plus, Edit, Trash2, Upload, Download } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
 import * as XLSX from "xlsx"
+import { Switch } from "@/components/ui/switch"
 
 interface LearningItem {
   word_text: string
@@ -31,6 +32,7 @@ interface LearningModule {
   title: string
   type: string
   memo: string | null
+  status: "ACTIVE" | "INACTIVE"
   level: { id: string; value: string }
   semester: { id: string; value: string } | null
   grade: { id: string; value: string } | null
@@ -57,6 +59,7 @@ export function LearningManagement({
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [editingModule, setEditingModule] = useState<LearningModule | null>(null)
+  const [isTogglingStatus, setIsTogglingStatus] = useState<Record<string, boolean>>({})
   const [formData, setFormData] = useState({
     title: "",
     type: "TYPE_A",
@@ -101,6 +104,56 @@ export function LearningManagement({
     } catch (error) {
       console.error("Failed to refresh modules:", error)
       // 에러 발생해도 기존 데이터 유지
+    }
+  }
+
+  const handleToggleModuleStatus = async (module: LearningModule, nextStatus: "ACTIVE" | "INACTIVE") => {
+    const key = module.id
+    if (!key) return
+    if (isTogglingStatus[key]) return
+
+    setIsTogglingStatus((prev) => ({ ...prev, [key]: true }))
+
+    const optimistic = (arr: LearningModule[]) =>
+      arr.map((m) => (m.id === key ? { ...m, status: nextStatus } : m))
+
+    // Optimistic UI
+    setModules((prev) => optimistic(prev))
+
+    try {
+      const res = await fetch(`/api/admin/learning-modules/${key}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: nextStatus }),
+      })
+
+      if (!res.ok) {
+        const contentType = res.headers.get("content-type")
+        if (contentType && contentType.includes("application/json")) {
+          const data = await res.json()
+          throw new Error(data.error || "상태 변경 실패")
+        }
+        const text = await res.text()
+        throw new Error(text || "상태 변경 실패")
+      }
+
+      toast({
+        title: "성공",
+        description: `${module.title} 상태가 ${nextStatus === "ACTIVE" ? "활성" : "비활성"}로 변경되었습니다.`,
+      })
+
+      // 서버 동기화
+      await refreshModules()
+    } catch (error: any) {
+      // Revert
+      setModules((prev) => optimistic(prev).map((m) => (m.id === key ? { ...m, status: module.status } : m)))
+      toast({
+        title: "오류",
+        description: error?.message || "상태 변경에 실패했습니다.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsTogglingStatus((prev) => ({ ...prev, [key]: false }))
     }
   }
 
@@ -1091,6 +1144,7 @@ export function LearningManagement({
                 <TableHead>학년</TableHead>
                 <TableHead>문항 수</TableHead>
                 <TableHead>생성일</TableHead>
+                <TableHead>상태</TableHead>
                 <TableHead>작업</TableHead>
               </TableRow>
             </TableHeader>
@@ -1107,6 +1161,31 @@ export function LearningManagement({
                   <TableCell>{module.items.length}</TableCell>
                   <TableCell>
                     {new Date((module as any).createdAt).toLocaleDateString("ko-KR")}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-3">
+                      <span
+                        className={`text-xs font-medium ${
+                          module.status === "INACTIVE" ? "text-gray-900" : "text-gray-400"
+                        }`}
+                      >
+                        OFF
+                      </span>
+                      <Switch
+                        checked={module.status === "ACTIVE"}
+                        disabled={!!isTogglingStatus[module.id]}
+                        onCheckedChange={(checked) => {
+                          handleToggleModuleStatus(module, checked ? "ACTIVE" : "INACTIVE")
+                        }}
+                      />
+                      <span
+                        className={`text-xs font-medium ${
+                          module.status === "ACTIVE" ? "text-green-700" : "text-gray-400"
+                        }`}
+                      >
+                        ON
+                      </span>
+                    </div>
                   </TableCell>
                   <TableCell>
                     <Button
