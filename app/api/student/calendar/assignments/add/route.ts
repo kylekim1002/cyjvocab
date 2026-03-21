@@ -12,16 +12,16 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json().catch(() => ({}))
-    const { date, semesterId, levelId, moduleId } = body as {
+    const { date, moduleId } = body as {
       date?: string
       semesterId?: string
       levelId?: string
       moduleId?: string
     }
 
-    if (!date || !semesterId || !levelId || !moduleId) {
+    if (!date || !moduleId) {
       return NextResponse.json(
-        { error: "날짜/학기/레벨/학습(모듈) 값이 필요합니다." },
+        { error: "날짜와 학습(모듈) ID가 필요합니다." },
         { status: 400 }
       )
     }
@@ -30,7 +30,7 @@ export async function POST(request: Request) {
     const assignedDate = new Date(date)
     assignedDate.setHours(0, 0, 0, 0)
 
-    // 학생의 활성 클래스 중 levelId 일치하는 클래스 1개 선택
+    // 학생의 활성 클래스 중 하나를 앵커로 사용 (학습 모듈 레벨과 클래스 레벨은 무관)
     const student = await prisma.student.findUnique({
       where: { id: session.user.studentId },
       include: {
@@ -51,31 +51,23 @@ export async function POST(request: Request) {
       )
     }
 
-    const matchedClass = student.studentClasses
-      .map((sc) => sc.class)
-      .find((cls) => cls.levelId === levelId)
-
-    if (!matchedClass) {
+    const anchorClass = student.studentClasses[0]?.class
+    if (!anchorClass) {
       return NextResponse.json(
-        { error: "선택한 레벨에 해당하는 배정 클래스가 없습니다." },
+        { error: "배정된 클래스가 없어 학습을 추가할 수 없습니다." },
         { status: 404 }
       )
     }
 
-    // 모듈 검증: semesterId/levelId가 일치해야 함
+    // 모듈: 등록된 활성 학습이면 배정 가능 (학기/레벨은 UI 검색용이며 본문과 불일치해도 허용)
     const module = await prisma.learningModule.findUnique({
       where: { id: moduleId },
-      select: { id: true, title: true, levelId: true, semesterId: true },
+      select: { id: true, title: true, status: true },
     })
 
-    if (
-      !module ||
-      module.levelId !== levelId ||
-      // semesterId는 optional이지만, 학생 추가 UI에서는 semester를 필수로 취급
-      module.semesterId !== semesterId
-    ) {
+    if (!module || module.status !== "ACTIVE") {
       return NextResponse.json(
-        { error: "선택한 학습(모듈)이 조건에 맞지 않습니다." },
+        { error: "선택한 학습을 찾을 수 없거나 비활성 상태입니다." },
         { status: 400 }
       )
     }
@@ -84,7 +76,7 @@ export async function POST(request: Request) {
     const existingAssignment = await prisma.classAssignment.findUnique({
       where: {
         classId_assignedDate: {
-          classId: matchedClass.id,
+          classId: anchorClass.id,
           assignedDate,
         },
       },
@@ -95,7 +87,7 @@ export async function POST(request: Request) {
       ? existingAssignment
       : await prisma.classAssignment.create({
           data: {
-            classId: matchedClass.id,
+            classId: anchorClass.id,
             assignedDate,
           },
           include: { modules: true },
