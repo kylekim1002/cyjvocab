@@ -122,11 +122,17 @@ git push origin main
 4. 프로젝트 설정:
    - Framework Preset: Next.js (자동 감지)
    - Root Directory: `./` (기본값)
-   - Build Command: **`prisma generate && prisma db push && next build`** (`vercel.json`에 정의됨 — 배포 시 DB 스키마 동기화)
+   - Build Command: **`prisma generate && next build`** (`vercel.json`)
    - Output Directory: `.next` (기본값)
    - Install Command: `npm install` (기본값)
 
-**중요**: Vercel 프로젝트에 **`DATABASE_URL`**(Supabase PostgreSQL)이 Production/Preview 모두 설정되어 있어야 빌드가 성공합니다.
+**왜 빌드에 `prisma db push`를 넣지 않나요?**  
+Supabase **Transaction pooler** URL(`…pooler…:6543`)로 `db push`를 돌리면 Prisma가 **여기서 멈추거나 매우 느려질 수 있습니다.** 스키마 반영은 아래 중 하나로 하세요.
+
+- **권장**: Supabase **SQL Editor**에서 `scripts/add-word-audio-table.sql` 등 필요한 SQL 실행 (또는 `supabase-schema.sql` 반영)
+- 또는 로컬/CI에서 **Direct 연결**(`…supabase.co:5432`, Settings → Database → URI)로만 `npm run db:push` 실행
+
+**중요**: 런타임(Next/Prisma Client)용 `DATABASE_URL`은 풀러 URL을 써도 되지만, **`db push`는 Direct(5432) 전용**으로 분리하는 방식도 있습니다.
 
 ### 3.2 환경 변수 입력
 
@@ -142,10 +148,9 @@ git push origin main
 
 ### 4.1 데이터베이스 마이그레이션
 
-배포 빌드 시 `prisma db push`가 실행되어 **스키마가 Supabase DB에 반영**됩니다 (예: `WordAudio` 음원 풀 테이블).
+배포 **빌드에서는 `db push`를 실행하지 않습니다.** 테이블 추가가 필요하면 Supabase SQL Editor에서 `scripts/add-word-audio-table.sql` 또는 `supabase-schema.sql`의 해당 구문을 실행하세요.
 
-- 빌드가 DB 연결 오류로 실패하면: Vercel 환경 변수의 `DATABASE_URL`을 확인하세요.
-- 수동으로만 적용하려면 Supabase SQL Editor에서 `supabase-schema.sql`의 `WordAudio` 구문을 실행해도 됩니다.
+- Vercel에 `DATABASE_URL`이 **pooler `:6543`**이면 Prisma `db push`가 멈추는 경우가 많습니다 → 스키마 작업은 **Direct `:5432`** 또는 **SQL 한 번 실행**이 안전합니다.
 
 ### 4.1.1 음원 풀(WordAudio) 배포 후 확인
 

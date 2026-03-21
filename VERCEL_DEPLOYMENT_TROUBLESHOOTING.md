@@ -35,7 +35,7 @@
 1. Vercel 프로젝트 설정 → **"Settings"** → **"General"**
 2. **"Build Command"** 확인 (또는 `vercel.json` 사용 시 자동):
    ```
-   prisma generate && prisma db push && next build
+   prisma generate && next build
    ```
 3. 정확히 위와 같이 입력되어 있는지 확인
 4. 수정 후 **"Save"** 클릭
@@ -99,10 +99,13 @@
 3. `vercel.json` 파일 확인:
    ```json
    {
-     "buildCommand": "prisma generate && prisma db push && next build"
+     "buildCommand": "prisma generate && next build"
    }
    ```
-4. `prisma db push` 단계에서 실패하면 `DATABASE_URL`이 Vercel에 설정되어 있는지 확인하세요.
+
+### 7. 빌드가 `prisma db push`에서 멈출 때 (과거 설정)
+
+`Datasource ... pooler.supabase.com:6543` 다음으로 로그가 안 넘어가면 **Supabase Transaction pooler(6543) + Prisma db push** 조합 문제입니다. 빌드 명령에서 **`prisma db push` 제거**하고, 스키마는 **SQL Editor**(`scripts/add-word-audio-table.sql` 등) 또는 **Direct 연결(5432)**로만 `db push` 하세요.
 
 ## 배포 성공 확인
 
