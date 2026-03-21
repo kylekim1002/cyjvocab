@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState, useTransition } from "react"
+import { useEffect, useMemo, useRef, useState, useTransition } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { ChevronLeft, ChevronRight, RefreshCw } from "lucide-react"
@@ -94,6 +94,9 @@ export function StudentHomeContent({
   const [isSearching, setIsSearching] = useState(false)
   const [isAssigning, setIsAssigning] = useState(false)
   const [isRefreshPending, startRefreshTransition] = useTransition()
+  const moduleSearchCache = useRef<Map<string, Array<{ id: string; title: string; type: string }>>>(
+    new Map()
+  )
   const { toast } = useToast()
 
   const assignments = useMemo(
@@ -149,6 +152,14 @@ export function StudentHomeContent({
     if (!isAddDialogOpen) return
     if (!selectedSemesterId || !selectedLevelId) return
 
+    const cacheKey = `${selectedSemesterId}:${selectedLevelId}:${searchQuery.trim().toLowerCase()}`
+    if (moduleSearchCache.current.has(cacheKey)) {
+      setModuleResults(moduleSearchCache.current.get(cacheKey) || [])
+      setIsSearching(false)
+      return
+    }
+
+    const controller = new AbortController()
     const t = window.setTimeout(async () => {
       try {
         setIsSearching(true)
@@ -157,18 +168,27 @@ export function StudentHomeContent({
         url.searchParams.set("levelId", selectedLevelId)
         if (searchQuery.trim()) url.searchParams.set("q", searchQuery.trim())
 
-        const res = await fetch(url.toString())
+        const res = await fetch(url.toString(), { signal: controller.signal })
         if (!res.ok) throw new Error("학습 검색 실패")
         const data = await res.json()
-        setModuleResults(Array.isArray(data) ? data : [])
+        const normalized = Array.isArray(data) ? data : []
+        moduleSearchCache.current.set(cacheKey, normalized)
+        setModuleResults(normalized)
       } catch {
-        setModuleResults([])
+        if (!controller.signal.aborted) {
+          setModuleResults([])
+        }
       } finally {
-        setIsSearching(false)
+        if (!controller.signal.aborted) {
+          setIsSearching(false)
+        }
       }
-    }, 300)
+    }, 180)
 
-    return () => window.clearTimeout(t)
+    return () => {
+      window.clearTimeout(t)
+      controller.abort()
+    }
   }, [isAddDialogOpen, selectedSemesterId, selectedLevelId, searchQuery])
 
   return (

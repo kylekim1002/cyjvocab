@@ -18,17 +18,50 @@ export default async function LearningPage({
       redirect("/student")
     }
 
-    // 학생 정보 및 현재 배정 클래스 확인
-    const student = await prisma.student.findUnique({
-      where: { id: session.user.studentId },
-      include: {
-        studentClasses: {
-          where: {
-            endAt: null, // 현재 배정된 클래스만
+    // 학생/배정/모듈을 병렬 조회해 페이지 전환 지연 최소화
+    const [student, assignment, module] = await Promise.all([
+      prisma.student.findUnique({
+        where: { id: session.user.studentId },
+        select: {
+          status: true,
+          studentClasses: {
+            where: {
+              endAt: null, // 현재 배정된 클래스만
+            },
+            select: { classId: true },
           },
         },
-      },
-    })
+      }),
+      prisma.classAssignment.findUnique({
+        where: { id: params.assignmentId },
+        select: {
+          id: true,
+          classId: true,
+          modules: {
+            where: {
+              moduleId: params.moduleId,
+            },
+            select: { id: true },
+          },
+        },
+      }),
+      prisma.learningModule.findUnique({
+        where: { id: params.moduleId },
+        select: {
+          id: true,
+          title: true,
+          type: true,
+          items: {
+            orderBy: { order: "asc" },
+            select: {
+              id: true,
+              order: true,
+              payloadJson: true,
+            },
+          },
+        },
+      }),
+    ])
 
     if (!student || student.status !== "ACTIVE") {
       redirect("/student")
@@ -37,19 +70,6 @@ export default async function LearningPage({
     if (student.studentClasses.length === 0) {
       redirect("/student")
     }
-
-    // Assignment 확인 및 권한 검증
-    const assignment = await prisma.classAssignment.findUnique({
-      where: { id: params.assignmentId },
-      include: {
-        class: true,
-        modules: {
-          where: {
-            moduleId: params.moduleId,
-          },
-        },
-      },
-    })
 
     if (!assignment) {
       redirect("/student")
@@ -69,16 +89,6 @@ export default async function LearningPage({
       redirect("/student")
     }
 
-    // 학습 모듈 조회
-    const module = await prisma.learningModule.findUnique({
-      where: { id: params.moduleId },
-      include: {
-        items: {
-          orderBy: { order: "asc" },
-        },
-      },
-    })
-
     if (!module) {
       redirect("/student")
     }
@@ -88,16 +98,30 @@ export default async function LearningPage({
     // 단계 확인 (wordlist, memorization, test, finaltest)
     const phase = searchParams?.phase || "test" // 기본값은 test
 
-    // 진행 중인 세션 확인 (모든 진행 중인 세션 조회 후 phase로 필터링)
-    const allInProgressSessions = await prisma.studySession.findMany({
-      where: {
-        studentId: session.user.studentId,
-        assignmentId: params.assignmentId,
-        moduleId: params.moduleId,
-        status: "IN_PROGRESS",
-      },
-      orderBy: { updatedAt: "desc" },
-    })
+    const [progress, allSessions] = await Promise.all([
+      prisma.studentAssignmentProgress.findUnique({
+        where: {
+          studentId_assignmentId_moduleId: {
+            studentId: session.user.studentId,
+            assignmentId: params.assignmentId,
+            moduleId: params.moduleId,
+          },
+        },
+      }),
+      prisma.studySession.findMany({
+        where: {
+          studentId: session.user.studentId,
+          assignmentId: params.assignmentId,
+          moduleId: params.moduleId,
+          status: { in: ["IN_PROGRESS", "COMPLETED"] },
+        },
+        orderBy: { updatedAt: "desc" },
+      }),
+    ])
+
+    const allInProgressSessions = allSessions.filter(
+      (session) => session.status === "IN_PROGRESS"
+    )
 
     // 해당 phase의 진행 중인 세션 찾기
     const inProgressSession = allInProgressSessions.find((session) => {
@@ -115,28 +139,10 @@ export default async function LearningPage({
       }
     }) || null
 
-    // 진행도 확인
-    const progress = await prisma.studentAssignmentProgress.findUnique({
-      where: {
-        studentId_assignmentId_moduleId: {
-          studentId: session.user.studentId,
-          assignmentId: params.assignmentId,
-          moduleId: params.moduleId,
-        },
-      },
-    })
-
     // 완료된 세션 확인 (해당 phase의 세션만)
-    // 모든 완료된 세션을 조회한 후 phase로 필터링
-    const allCompletedSessions = await prisma.studySession.findMany({
-      where: {
-        studentId: session.user.studentId,
-        assignmentId: params.assignmentId,
-        moduleId: params.moduleId,
-        status: "COMPLETED",
-      },
-      orderBy: { completedAt: "desc" },
-    })
+    const allCompletedSessions = allSessions.filter(
+      (session) => session.status === "COMPLETED"
+    )
 
     // 해당 phase의 완료된 세션 찾기
     const completedSession = allCompletedSessions.find((session) => {

@@ -14,14 +14,13 @@ export default async function StudentHomePage() {
   // 학생 정보 및 현재 배정 클래스 확인
   const student = await prisma.student.findUnique({
     where: { id: session.user.studentId },
-    include: {
+    select: {
+      status: true,
       studentClasses: {
         where: {
           endAt: null, // 현재 배정된 클래스만
         },
-        include: {
-          class: true,
-        },
+        select: { classId: true },
       },
     },
   })
@@ -77,8 +76,18 @@ export default async function StudentHomePage() {
     },
     include: {
       modules: {
-        include: {
-          module: true,
+        select: {
+          id: true,
+          moduleId: true,
+          order: true,
+          source: true,
+          module: {
+            select: {
+              id: true,
+              title: true,
+              type: true,
+            },
+          },
         },
         orderBy: {
           order: "asc",
@@ -87,6 +96,11 @@ export default async function StudentHomePage() {
       progress: {
         where: {
           studentId: session.user.studentId,
+        },
+        select: {
+          moduleId: true,
+          progressPct: true,
+          completed: true,
         },
       },
     },

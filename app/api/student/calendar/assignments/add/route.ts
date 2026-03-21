@@ -33,13 +33,14 @@ export async function POST(request: Request) {
     // 학생의 활성 클래스 중 하나를 앵커로 사용 (학습 모듈 레벨과 클래스 레벨은 무관)
     const student = await prisma.student.findUnique({
       where: { id: session.user.studentId },
-      include: {
+      select: {
+        status: true,
         studentClasses: {
           where: {
             endAt: null,
             class: { deletedAt: null },
           },
-          include: { class: true },
+          select: { classId: true },
         },
       },
     })
@@ -51,8 +52,8 @@ export async function POST(request: Request) {
       )
     }
 
-    const anchorClass = student.studentClasses[0]?.class
-    if (!anchorClass) {
+    const anchorClassId = student.studentClasses[0]?.classId
+    if (!anchorClassId) {
       return NextResponse.json(
         { error: "배정된 클래스가 없어 학습을 추가할 수 없습니다." },
         { status: 404 }
@@ -76,21 +77,19 @@ export async function POST(request: Request) {
     const existingAssignment = await prisma.classAssignment.findUnique({
       where: {
         classId_assignedDate: {
-          classId: anchorClass.id,
+          classId: anchorClassId,
           assignedDate,
         },
       },
-      include: { modules: true },
     })
 
     const assignment = existingAssignment
       ? existingAssignment
       : await prisma.classAssignment.create({
           data: {
-            classId: anchorClass.id,
+            classId: anchorClassId,
             assignedDate,
           },
-          include: { modules: true },
         })
 
     // 이미 해당 모듈이 배정되어 있으면 no-op

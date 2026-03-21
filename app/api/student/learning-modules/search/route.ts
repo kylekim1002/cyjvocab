@@ -26,6 +26,7 @@ export async function GET(request: Request) {
     const where: any = {
       semesterId,
       levelId,
+      status: "ACTIVE",
     }
 
     if (q) {
