@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
-import { Plus, Edit, Trash2, Upload, Download } from "lucide-react"
+import { Plus, Edit, Trash2, Upload, Download, Volume2 } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
 import * as XLSX from "xlsx"
 import { Switch } from "@/components/ui/switch"
@@ -79,6 +79,7 @@ export function LearningManagement({
   })
   const [editItems, setEditItems] = useState<LearningItem[]>([])
   const [isExcelUpload, setIsExcelUpload] = useState(false)
+  const [isLinkingAudioFromPool, setIsLinkingAudioFromPool] = useState(false)
 
   const semesterCodes = codes.filter((c) => c.category === "SEMESTER")
   const levelCodes = codes.filter((c) => c.category === "LEVEL")
@@ -685,20 +686,8 @@ export function LearningManagement({
     }
   }
 
-  // 학습 수정 다이얼로그 열기
-  const handleOpenEditDialog = (module: LearningModule) => {
-    setEditingModule(module)
-    setEditFormData({
-      title: module.title,
-      type: module.type,
-      semesterId: module.semester?.id || (semesterCodes[0]?.id ?? ""),
-      levelId: module.level.id,
-      gradeId: module.grade?.id || "",
-      memo: module.memo || "",
-    })
-    
-    // 기존 문항 로드
-    const loadedItems: LearningItem[] = module.items.map((item) => {
+  const mapModuleItemsToEditItems = (module: LearningModule): LearningItem[] =>
+    module.items.map((item) => {
       const correctIndex = item.payloadJson.correct_index || 0
       return {
         word_text: item.payloadJson.word_text || "",
@@ -711,8 +700,64 @@ export function LearningManagement({
         audio_url: item.payloadJson.audio_url || undefined,
       }
     })
-    setEditItems(loadedItems)
+
+  // 학습 수정 다이얼로그 열기
+  const handleOpenEditDialog = (module: LearningModule) => {
+    setEditingModule(module)
+    setEditFormData({
+      title: module.title,
+      type: module.type,
+      semesterId: module.semester?.id || (semesterCodes[0]?.id ?? ""),
+      levelId: module.level.id,
+      gradeId: module.grade?.id || "",
+      memo: module.memo || "",
+    })
+
+    setEditItems(mapModuleItemsToEditItems(module))
     setIsEditDialogOpen(true)
+  }
+
+  /** DB의 음원 풀(WordAudio)과 문항 word_text를 매칭해 payloadJson.audio_url 설정 */
+  const handleLinkAudioFromPool = async () => {
+    if (!editingModule) return
+    setIsLinkingAudioFromPool(true)
+    try {
+      const res = await fetch(
+        `/api/admin/learning-modules/${editingModule.id}/link-audio-from-pool`,
+        { method: "POST" }
+      )
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || "자동 연결 실패")
+
+      toast({
+        title: "음원 풀 연결",
+        description: data.message,
+      })
+
+      const oneRes = await fetch(`/api/admin/learning-modules/${editingModule.id}`)
+      if (oneRes.ok) {
+        const m: LearningModule = await oneRes.json()
+        setEditingModule(m)
+        setEditItems(mapModuleItemsToEditItems(m))
+        setModules((prev) => {
+          const idx = prev.findIndex((x) => x.id === m.id)
+          if (idx < 0) return [...prev, m]
+          const next = [...prev]
+          next[idx] = m
+          return next
+        })
+      } else {
+        await refreshModules()
+      }
+    } catch (e: any) {
+      toast({
+        title: "오류",
+        description: e?.message || "음원 자동 연결에 실패했습니다.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLinkingAudioFromPool(false)
+    }
   }
 
   // 학습 수정
@@ -1395,31 +1440,44 @@ export function LearningManagement({
 
                 {/* 문항 편집 섹션 - 생성과 동일한 구조 */}
                 <div className="border-t pt-4">
-                  <div className="flex justify-between items-center mb-4">
+                  <div className="flex flex-wrap justify-between items-center gap-2 mb-4">
                     <Label>문항 편집</Label>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        setEditItems([
-                          ...editItems,
-                          {
-                            word_text: "",
-                            choice1: "",
-                            choice2: "",
-                            choice3: "",
-                            choice4: "",
-                            correct_index: 0,
-                            image_url: "",
-                            audio_url: "",
-                          },
-                        ])
-                      }}
-                    >
-                      <Plus className="h-4 w-4 mr-2" />
-                      문항 추가
-                    </Button>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        disabled={isLinkingAudioFromPool}
+                        onClick={handleLinkAudioFromPool}
+                        title="음원 관리에 업로드한 풀과 단어를 매칭합니다"
+                      >
+                        <Volume2 className="h-4 w-4 mr-2" />
+                        {isLinkingAudioFromPool ? "연결 중…" : "음원 풀에서 자동 연결"}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setEditItems([
+                            ...editItems,
+                            {
+                              word_text: "",
+                              choice1: "",
+                              choice2: "",
+                              choice3: "",
+                              choice4: "",
+                              correct_index: 0,
+                              image_url: "",
+                              audio_url: "",
+                            },
+                          ])
+                        }}
+                      >
+                        <Plus className="h-4 w-4 mr-2" />
+                        문항 추가
+                      </Button>
+                    </div>
                   </div>
 
                   <div className="space-y-4">

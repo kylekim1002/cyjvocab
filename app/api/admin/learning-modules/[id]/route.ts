@@ -4,6 +4,41 @@ import { authOptions } from "@/lib/auth-options"
 import { prisma } from "@/lib/prisma"
 import { LearningType } from "@prisma/client"
 
+export async function GET(
+  _request: Request,
+  { params }: { params: { id: string } }
+) {
+  const session = await getServerSession(authOptions)
+
+  if (!session || (session.user.role !== "SUPER_ADMIN" && session.user.role !== "MANAGER")) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
+
+  try {
+    const module = await prisma.learningModule.findUnique({
+      where: { id: params.id },
+      include: {
+        level: true,
+        semester: true,
+        grade: true,
+        items: { orderBy: { order: "asc" } },
+      },
+    })
+
+    if (!module) {
+      return NextResponse.json({ error: "학습을 찾을 수 없습니다." }, { status: 404 })
+    }
+
+    return NextResponse.json(module)
+  } catch (error: any) {
+    console.error("Get learning module error:", error)
+    return NextResponse.json(
+      { error: error.message || "학습 조회에 실패했습니다." },
+      { status: 500 }
+    )
+  }
+}
+
 export async function PATCH(
   request: Request,
   { params }: { params: { id: string } }

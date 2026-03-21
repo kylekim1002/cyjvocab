@@ -185,6 +185,21 @@ CREATE INDEX "LearningItem_moduleId_order_idx" ON "LearningItem"("moduleId", "or
 
 ALTER TABLE "LearningItem" ADD CONSTRAINT "LearningItem_moduleId_fkey" FOREIGN KEY ("moduleId") REFERENCES "LearningModule"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
+-- WordAudio 테이블 (단어별 공용 음원 풀)
+CREATE TABLE "WordAudio" (
+    "id" TEXT NOT NULL,
+    "normalizedKey" TEXT NOT NULL,
+    "publicUrl" TEXT NOT NULL,
+    "storagePath" TEXT NOT NULL,
+    "originalFilename" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "WordAudio_pkey" PRIMARY KEY ("id")
+);
+
+CREATE UNIQUE INDEX "WordAudio_normalizedKey_key" ON "WordAudio"("normalizedKey");
+
 -- ClassAssignment 테이블
 CREATE TABLE "ClassAssignment" (
     "id" TEXT NOT NULL,

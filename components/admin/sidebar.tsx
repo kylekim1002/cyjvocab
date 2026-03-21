@@ -18,6 +18,7 @@ import {
   LogOut,
   Home,
   Database,
+  Volume2,
 } from "lucide-react"
 
 const menuItems = [
@@ -57,6 +58,11 @@ const menuItems = [
     title: "학습 관리",
     href: "/admin/learning",
     icon: BookOpen,
+  },
+  {
+    title: "음원 관리",
+    href: "/admin/word-audio",
+    icon: Volume2,
   },
   {
     title: "성적 조회",

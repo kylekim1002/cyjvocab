@@ -229,6 +229,17 @@ model LearningItem {
   @@index([moduleId, order])
 }
 
+/// 단어(정규화 키)별 공용 음원 풀 — 학습 문항 word_text와 매칭해 audio_url 자동 연결에 사용
+model WordAudio {
+  id               String   @id @default(cuid())
+  normalizedKey    String   @unique
+  publicUrl        String
+  storagePath      String
+  originalFilename String
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
 model ClassAssignment {
   id           String   @id @default(cuid())
   classId      String
