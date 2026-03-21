@@ -1,8 +1,47 @@
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth-options"
 import { redirect } from "next/navigation"
+import dynamic from "next/dynamic"
 import { prisma } from "@/lib/prisma"
-import { LearningContent } from "@/components/student/learning-content"
+import { LearningPageLoading } from "@/components/student/learning-page-loading"
+
+const LearningContent = dynamic(
+  () =>
+    import("@/components/student/learning-content").then((mod) => ({
+      default: mod.LearningContent,
+    })),
+  {
+    loading: () => <LearningPageLoading />,
+  }
+)
+
+const SESSION_PHASE_SCAN_LIMIT = 30
+
+const sessionSelect = {
+  id: true,
+  status: true,
+  payloadJson: true,
+  updatedAt: true,
+} as const
+
+function findSessionForPhase<
+  T extends { payloadJson: unknown; status: string }
+>(sessions: T[], phase: string): T | null {
+  return (
+    sessions.find((session) => {
+      try {
+        if (!session.payloadJson) {
+          return phase === "test"
+        }
+        const payload = session.payloadJson as { phase?: string }
+        const sessionPhase = payload?.phase || "test"
+        return sessionPhase === phase
+      } catch {
+        return phase === "test"
+      }
+    }) ?? null
+  )
+}
 
 export default async function LearningPage({
   params,
@@ -97,69 +136,42 @@ export default async function LearningPage({
     const isReviewMode = searchParams?.review === "true"
     // 단계 확인 (wordlist, memorization, test, finaltest)
     const phase = searchParams?.phase || "test" // 기본값은 test
+    const studentId = session.user.studentId
 
-    const [progress, allSessions] = await Promise.all([
-      prisma.studentAssignmentProgress.findUnique({
-        where: {
-          studentId_assignmentId_moduleId: {
-            studentId: session.user.studentId,
-            assignmentId: params.assignmentId,
-            moduleId: params.moduleId,
+    const sessionWhere = {
+      studentId,
+      assignmentId: params.assignmentId,
+      moduleId: params.moduleId,
+    }
+
+    // 진행/완료 세션을 분리·상한 조회 — 100건 혼합 스캔 대신 최근 N건만 (payload만 전달)
+    const [progress, inProgressCandidates, completedCandidates] =
+      await Promise.all([
+        prisma.studentAssignmentProgress.findUnique({
+          where: {
+            studentId_assignmentId_moduleId: {
+              studentId,
+              assignmentId: params.assignmentId,
+              moduleId: params.moduleId,
+            },
           },
-        },
-      }),
-      prisma.studySession.findMany({
-        where: {
-          studentId: session.user.studentId,
-          assignmentId: params.assignmentId,
-          moduleId: params.moduleId,
-          status: { in: ["IN_PROGRESS", "COMPLETED"] },
-        },
-        orderBy: { updatedAt: "desc" },
-        take: 100,
-      }),
-    ])
+        }),
+        prisma.studySession.findMany({
+          where: { ...sessionWhere, status: "IN_PROGRESS" },
+          orderBy: { updatedAt: "desc" },
+          take: SESSION_PHASE_SCAN_LIMIT,
+          select: sessionSelect,
+        }),
+        prisma.studySession.findMany({
+          where: { ...sessionWhere, status: "COMPLETED" },
+          orderBy: { updatedAt: "desc" },
+          take: SESSION_PHASE_SCAN_LIMIT,
+          select: sessionSelect,
+        }),
+      ])
 
-    const allInProgressSessions = allSessions.filter(
-      (session) => session.status === "IN_PROGRESS"
-    )
-
-    // 해당 phase의 진행 중인 세션 찾기
-    const inProgressSession = allInProgressSessions.find((session) => {
-      try {
-        if (!session.payloadJson) {
-          return phase === "test" // payloadJson이 없으면 test로 간주
-        }
-        const payload = session.payloadJson as any
-        const sessionPhase = payload?.phase || "test" // 기본값은 test
-        return sessionPhase === phase
-      } catch (error) {
-        console.error("Error parsing session payloadJson:", error)
-        // payloadJson이 없거나 파싱 실패 시 기본값으로 test로 간주
-        return phase === "test"
-      }
-    }) || null
-
-    // 완료된 세션 확인 (해당 phase의 세션만)
-    const allCompletedSessions = allSessions.filter(
-      (session) => session.status === "COMPLETED"
-    )
-
-    // 해당 phase의 완료된 세션 찾기
-    const completedSession = allCompletedSessions.find((session) => {
-      try {
-        if (!session.payloadJson) {
-          return phase === "test" // payloadJson이 없으면 test로 간주
-        }
-        const payload = session.payloadJson as any
-        const sessionPhase = payload?.phase || "test" // 기본값은 test
-        return sessionPhase === phase
-      } catch (error) {
-        console.error("Error parsing session payloadJson:", error)
-        // payloadJson이 없거나 파싱 실패 시 기본값으로 test로 간주
-        return phase === "test"
-      }
-    }) || null
+    const inProgressSession = findSessionForPhase(inProgressCandidates, phase)
+    const completedSession = findSessionForPhase(completedCandidates, phase)
 
     return (
       <LearningContent

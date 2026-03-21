@@ -29,18 +29,6 @@ export async function POST(request: Request) {
 
     const studentId = session.user.studentId
 
-    // Assignment 확인 (학생 정보는 세션에서 이미 확인됨)
-    const assignment = await prisma.classAssignment.findUnique({
-      where: { id: assignmentId },
-    })
-
-    if (!assignment) {
-      return NextResponse.json(
-        { error: "배정을 찾을 수 없습니다." },
-        { status: 404 }
-      )
-    }
-
     // 진행률 계산
     const maxIndex = Math.min(currentIndex, totalCount - 1)
     const progressPct = Math.floor(((maxIndex + 1) / totalCount) * 100)
@@ -55,6 +43,21 @@ export async function POST(request: Request) {
         },
       },
     })
+
+    // 첫 생성 시에만 배정 존재 여부 확인 (이미 progress 행이 있으면 DB 1회 절약)
+    if (!existingProgress) {
+      const assignment = await prisma.classAssignment.findUnique({
+        where: { id: assignmentId },
+        select: { id: true },
+      })
+
+      if (!assignment) {
+        return NextResponse.json(
+          { error: "배정을 찾을 수 없습니다." },
+          { status: 404 }
+        )
+      }
+    }
 
     let updatedProgress
 

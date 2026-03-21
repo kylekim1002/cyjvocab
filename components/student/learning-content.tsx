@@ -1,12 +1,13 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo, useRef, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { useRouter } from "next/navigation"
 import { useToast } from "@/components/ui/use-toast"
 import { ArrowLeft, ArrowRight, Volume2 } from "lucide-react"
+import { playAudioFromPool, preloadAudioUrls } from "@/lib/student-learning"
 
 interface LearningItem {
   id: string
@@ -74,6 +75,27 @@ export function LearningContent({
   const [writingHearts, setWritingHearts] = useState<number>(3)
   const [writingWrongCount, setWritingWrongCount] = useState<number>(0)
   const [writingShowAnswer, setWritingShowAnswer] = useState<boolean>(false)
+  const [isCheckingWriting, setIsCheckingWriting] = useState(false)
+
+  /** order 정렬 1회만 — 렌더마다 sort 반복 제거 */
+  const sortedItems = useMemo(() => {
+    if (!module.items || !Array.isArray(module.items) || module.items.length === 0) return []
+    return [...module.items].sort((a, b) => a.order - b.order)
+  }, [module.items])
+
+  const quizAnswersRef = useRef(quizAnswers)
+  quizAnswersRef.current = quizAnswers
+
+  const sessionIdRef = useRef(sessionId)
+  sessionIdRef.current = sessionId
+  const phaseRef = useRef(phase)
+  phaseRef.current = phase
+  const moduleTypeRef = useRef(module.type)
+  moduleTypeRef.current = module.type
+
+  const testSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  /** 디바운스 대기 중인 테스트 저장 인덱스 (언마운트 시 flush) */
+  const pendingTestSaveIndexRef = useRef<number | null>(null)
 
   useEffect(() => {
     // 단어목록/암기학습/단어학습은 항상 처음부터 시작
@@ -143,6 +165,59 @@ export function LearningContent({
     setWritingWrongCount(0)
     setWritingShowAnswer(false)
   }, [phase, currentIndex, module.id])
+
+  // 현재·다음 문항 음원 URL 프리로드 (듣기 클릭 체감 개선)
+  useEffect(() => {
+    if (sortedItems.length === 0) return
+    const idx = Math.max(0, Math.min(currentIndex, sortedItems.length - 1))
+    const cur = sortedItems[idx]
+    const next = sortedItems[idx + 1]
+    preloadAudioUrls([
+      cur?.payloadJson?.audio_url,
+      next?.payloadJson?.audio_url,
+    ])
+  }, [sortedItems, currentIndex])
+
+  /** 테스트 세션 저장 (ref만 사용 — 언마운트/디바운스 공통) */
+  const persistTestSessionSave = useCallback((targetIndex: number) => {
+    const sid = sessionIdRef.current
+    if (!sid) return
+    if (phaseRef.current !== "test") return
+    if (moduleTypeRef.current !== "TYPE_A" && moduleTypeRef.current !== "TYPE_B") return
+    const qa = quizAnswersRef.current
+    const normalizedQuizAnswers: Record<number, number> = {}
+    Object.keys(qa).forEach((key) => {
+      const numKey = Number(key)
+      if (!isNaN(numKey)) {
+        normalizedQuizAnswers[numKey] = Number(qa[key])
+      }
+    })
+    void fetch(`/api/student/sessions/${sid}/save`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        payloadJson: {
+          currentIndex: targetIndex,
+          phase: phaseRef.current,
+          quizAnswers: normalizedQuizAnswers,
+        },
+      }),
+    }).catch((error) => console.error("Auto-save error:", error))
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      if (testSaveTimerRef.current) {
+        clearTimeout(testSaveTimerRef.current)
+        testSaveTimerRef.current = null
+      }
+      const pending = pendingTestSaveIndexRef.current
+      if (pending !== null) {
+        pendingTestSaveIndexRef.current = null
+        persistTestSessionSave(pending)
+      }
+    }
+  }, [persistTestSessionSave])
 
   const startNewSession = async () => {
     setIsLoading(true)
@@ -221,7 +296,6 @@ export function LearningContent({
 
     // 테스트 단계에서는 마지막 문제의 답이 선택되었는지 확인
     if (phase === "test" && (module.type === "TYPE_A" || module.type === "TYPE_B")) {
-      const sortedItems = [...module.items].sort((a, b) => a.order - b.order)
       const safeCurrentIndex = Math.max(0, Math.min(currentIndex, sortedItems.length - 1))
       const numKey = Number(safeCurrentIndex)
       const hasAnswer = quizAnswers[numKey] !== undefined && quizAnswers[numKey] !== null
@@ -337,33 +411,28 @@ export function LearningContent({
     }
   }
 
-  /** 테스트 단계: UI는 즉시 바꾸고 저장은 백그라운드(네트워크 대기로 버튼이 느려지지 않게) */
-  const queueTestAutosaveForIndex = (targetIndex: number) => {
-    if (!sessionId) return
-    if (phase !== "test") return
-    if (module.type !== "TYPE_A" && module.type !== "TYPE_B") return
-    const normalizedQuizAnswers: Record<number, number> = {}
-    Object.keys(quizAnswers).forEach((key) => {
-      const numKey = Number(key)
-      if (!isNaN(numKey)) {
-        normalizedQuizAnswers[numKey] = Number(quizAnswers[key])
-      }
-    })
-    void fetch(`/api/student/sessions/${sessionId}/save`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        payloadJson: {
-          currentIndex: targetIndex,
-          phase,
-          quizAnswers: normalizedQuizAnswers,
-        },
-      }),
-    }).catch((error) => console.error("Auto-save error:", error))
-  }
+  /**
+   * 테스트 단계: UI 즉시 + 저장은 디바운스(연속 클릭 시 서버 왕복 감소)
+   */
+  const queueTestAutosaveForIndex = useCallback(
+    (targetIndex: number) => {
+      if (!sessionId) return
+      if (phase !== "test") return
+      if (module.type !== "TYPE_A" && module.type !== "TYPE_B") return
+
+      pendingTestSaveIndexRef.current = targetIndex
+      if (testSaveTimerRef.current) clearTimeout(testSaveTimerRef.current)
+      testSaveTimerRef.current = setTimeout(() => {
+        testSaveTimerRef.current = null
+        const idx = pendingTestSaveIndexRef.current
+        pendingTestSaveIndexRef.current = null
+        if (idx !== null) persistTestSessionSave(idx)
+      }, 420)
+    },
+    [sessionId, phase, module.type, persistTestSessionSave]
+  )
 
   const handleNext = async () => {
-    const sortedItems = [...module.items].sort((a, b) => a.order - b.order)
     const safeCurrentIndex = Math.max(0, Math.min(currentIndex, sortedItems.length - 1))
     
     // 테스트 단계에서는 답이 선택되었는지 확인
@@ -401,7 +470,6 @@ export function LearningContent({
   }
 
   const handlePrev = async () => {
-    const sortedItems = [...module.items].sort((a, b) => a.order - b.order)
     const safeCurrentIndex = Math.max(0, Math.min(currentIndex, sortedItems.length - 1))
     if (safeCurrentIndex > 0) {
       const newIndex = safeCurrentIndex - 1
@@ -417,7 +485,6 @@ export function LearningContent({
   const updateProgress = async (index: number) => {
     try {
       const mode = phase === "memorization" ? "MEMORIZE" : "WORDLIST"
-      const sortedItems = [...module.items].sort((a, b) => a.order - b.order)
       const response = await fetch("/api/student/progress/update", {
         method: "POST",
         headers: {
@@ -467,7 +534,6 @@ export function LearningContent({
     try {
       // 쓰기학습은 진행률 저장을 MEMORIZE로 매핑
       const mode = phase === "memorization" ? "MEMORIZE" : "WORDLIST"
-      const sortedItems = [...module.items].sort((a, b) => a.order - b.order)
       // 마지막 인덱스로 진행률 업데이트 (100%)
       const response = await fetch("/api/student/progress/update", {
         method: "POST",
@@ -520,30 +586,30 @@ export function LearningContent({
     }
   }
 
-  // 음성 재생 함수
-  const handlePlaySound = (item?: LearningItem) => {
-    const audioUrl = (item ?? currentItem)?.payloadJson?.audio_url
-    
-    // 음원 파일이나 링크가 있으면 재생
-    if (audioUrl) {
-      const audio = new Audio(audioUrl)
-      audio.play().catch((error) => {
-        console.error("Audio play error:", error)
-        toast({
-          title: "오류",
-          description: "음원 재생에 실패했습니다.",
-          variant: "destructive",
+  // 음성 재생 (풀 재사용 — 새 Audio() 반복 생성 방지)
+  const handlePlaySound = useCallback(
+    (item?: LearningItem) => {
+      const idx = Math.max(0, Math.min(currentIndex, sortedItems.length - 1))
+      const fallback = sortedItems[idx]
+      const audioUrl = (item ?? fallback)?.payloadJson?.audio_url
+      if (audioUrl) {
+        void playAudioFromPool(audioUrl).catch((error) => {
+          console.error("Audio play error:", error)
+          toast({
+            title: "오류",
+            description: "음원 재생에 실패했습니다.",
+            variant: "destructive",
+          })
         })
+        return
+      }
+      toast({
+        title: "알림",
+        description: "음성 없음",
       })
-      return
-    }
-    
-    // 음원이 없으면 음성 없음 표시
-    toast({
-      title: "알림",
-      description: "음성 없음",
-    })
-  }
+    },
+    [currentIndex, sortedItems, toast]
+  )
 
   // 정답 뜻 가져오기
   const getCorrectMeaning = (item: LearningItem) => {
@@ -563,32 +629,31 @@ export function LearningContent({
   const normalizeText = (value: string) =>
     value.trim().replace(/\s+/g, "").toLowerCase()
 
-  const [isCheckingWriting, setIsCheckingWriting] = useState(false)
-
   const handleWritingCheck = async () => {
     if (isCheckingWriting) return
-    if (!currentItem) return
+    const safeIdx = Math.max(0, Math.min(currentIndex, sortedItems.length - 1))
+    const writingItem = sortedItems[safeIdx]
+    if (!writingItem) return
 
     setIsCheckingWriting(true)
     try {
       // 쓰기학습: "답"은 뜻(정답 의미), "문제"는 스펠링으로 뒤집어서 처리
-      const expected = getCorrectMeaning(currentItem)
+      const expected = getCorrectMeaning(writingItem)
       const typed = normalizeText(writingInput)
       const normalizedExpected = normalizeText(expected)
 
       // 정답 제출
       if (typed && normalizedExpected && typed === normalizedExpected) {
         // 다음 문제로 이동
-        const newIndex = safeCurrentIndex + 1
-        if (safeCurrentIndex < sortedItems.length - 1) {
+        const newIndex = safeIdx + 1
+        if (safeIdx < sortedItems.length - 1) {
           setWritingInput("")
           setWritingWrongCount(0)
           setWritingHearts(3)
           setWritingShowAnswer(false)
 
-          // 진행률을 MEMORIZE로 업데이트 (writing은 memorization에 매핑)
-          await updateProgress(newIndex)
           setCurrentIndex(newIndex)
+          void updateProgress(newIndex)
         } else {
           // 마지막 문제: 완료 처리 후 캘린더로 이동
           await handleWordlistMemorizeComplete()
@@ -618,12 +683,6 @@ export function LearningContent({
       setIsCheckingWriting(false)
     }
   }
-
-  // 항상 order로 정렬된 배열 사용 (서버와 동일한 순서 보장)
-  // module.items가 없거나 undefined인 경우 빈 배열로 처리
-  const sortedItems = (module.items && Array.isArray(module.items) && module.items.length > 0)
-    ? [...module.items].sort((a, b) => a.order - b.order)
-    : []
 
   // 배열이 비어있는 경우 처리 (하지만 서버에서 리다이렉트하지 않고 클라이언트에서 처리)
   if (sortedItems.length === 0) {
@@ -820,10 +879,7 @@ export function LearningContent({
                   }
                 }
               })
-              
-              // module.items를 order로 정렬
-              const sortedItems = [...module.items].sort((a, b) => a.order - b.order)
-              
+
               return sortedItems.map((item, arrayIndex) => {
                 const correctIndex = Number(getCorrectAnswer(item)) // 숫자로 변환
                 const studentAnswer = normalizedCompletedAnswers[arrayIndex]
