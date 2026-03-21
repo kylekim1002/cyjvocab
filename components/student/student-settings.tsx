@@ -1,13 +1,11 @@
 "use client"
-
-import { useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useToast } from "@/components/ui/use-toast"
 import { signOut } from "next-auth/react"
-import { Copy, RefreshCw } from "lucide-react"
+import { Copy } from "lucide-react"
 
 interface Student {
   id: string
@@ -28,8 +26,7 @@ interface StudentSettingsProps {
 
 export function StudentSettings({ student }: StudentSettingsProps) {
   const { toast } = useToast()
-  const [autoLoginToken, setAutoLoginToken] = useState(student.autoLoginToken)
-  const [isRegenerating, setIsRegenerating] = useState(false)
+  const autoLoginToken = student.autoLoginToken
 
   const handleCopyToken = () => {
     if (!autoLoginToken) return
@@ -40,34 +37,6 @@ export function StudentSettings({ student }: StudentSettingsProps) {
       title: "복사 완료",
       description: "자동로그인 링크가 복사되었습니다.",
     })
-  }
-
-  const handleRegenerateToken = async () => {
-    setIsRegenerating(true)
-    try {
-      const response = await fetch(`/api/student/auto-login-token`, {
-        method: "POST",
-      })
-
-      if (!response.ok) {
-        throw new Error("토큰 재생성 실패")
-      }
-
-      const data = await response.json()
-      setAutoLoginToken(data.token)
-      toast({
-        title: "성공",
-        description: "자동로그인 링크가 재생성되었습니다.",
-      })
-    } catch (error) {
-      toast({
-        title: "오류",
-        description: "토큰 재생성에 실패했습니다.",
-        variant: "destructive",
-      })
-    } finally {
-      setIsRegenerating(false)
-    }
   }
 
   return (
@@ -106,37 +75,22 @@ export function StudentSettings({ student }: StudentSettingsProps) {
         </CardHeader>
         <CardContent className="space-y-4">
           {autoLoginToken ? (
-            <>
-              <div>
-                <Label>링크</Label>
-                <div className="flex gap-2">
-                  <Input
-                    value={`${typeof window !== 'undefined' ? window.location.origin : ''}/s/auto/${autoLoginToken}`}
-                    readOnly
-                  />
-                  <Button onClick={handleCopyToken}>
-                    <Copy className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-              <Button
-                variant="outline"
-                onClick={handleRegenerateToken}
-                disabled={isRegenerating}
-              >
-                <RefreshCw className="h-4 w-4 mr-2" />
-                링크 재생성
-              </Button>
-            </>
-          ) : (
             <div>
-              <p className="text-muted-foreground mb-4">
-                자동로그인 링크가 없습니다.
-              </p>
-              <Button onClick={handleRegenerateToken} disabled={isRegenerating}>
-                링크 생성
-              </Button>
+              <Label>링크</Label>
+              <div className="flex gap-2">
+                <Input
+                  value={`${typeof window !== "undefined" ? window.location.origin : ""}/s/auto/${autoLoginToken}`}
+                  readOnly
+                />
+                <Button type="button" onClick={handleCopyToken}>
+                  <Copy className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
+          ) : (
+            <p className="text-muted-foreground">
+              자동로그인 링크가 없습니다. 발급이 필요하면 캠퍼스(관리자)에 문의해 주세요.
+            </p>
           )}
         </CardContent>
       </Card>

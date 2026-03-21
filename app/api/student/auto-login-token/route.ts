@@ -1,35 +1,15 @@
 import { NextResponse } from "next/server"
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth-options"
-import { prisma } from "@/lib/prisma"
-import { generateAutoLoginToken } from "@/lib/utils"
 
+/**
+ * 자동로그인 토큰 재발급은 관리자 전용입니다.
+ * 학생은 POST로 토큰을 생성/재생성할 수 없습니다.
+ */
 export async function POST() {
-  const session = await getServerSession(authOptions)
-
-  if (!session?.user?.studentId) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  }
-
-  try {
-    const token = generateAutoLoginToken()
-    const expiresAt = new Date()
-    expiresAt.setFullYear(expiresAt.getFullYear() + 1) // 1년 후 만료
-
-    await prisma.student.update({
-      where: { id: session.user.studentId },
-      data: {
-        autoLoginToken: token,
-        autoLoginTokenExpiresAt: expiresAt,
-      },
-    })
-
-    return NextResponse.json({ token })
-  } catch (error) {
-    console.error("Generate token error:", error)
-    return NextResponse.json(
-      { error: "토큰 생성에 실패했습니다." },
-      { status: 500 }
-    )
-  }
+  return NextResponse.json(
+    {
+      error:
+        "자동로그인 링크 재발급은 관리자만 가능합니다. 캠퍼스에 문의해 주세요.",
+    },
+    { status: 403 }
+  )
 }
