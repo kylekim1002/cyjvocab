@@ -122,9 +122,11 @@ git push origin main
 4. 프로젝트 설정:
    - Framework Preset: Next.js (자동 감지)
    - Root Directory: `./` (기본값)
-   - Build Command: `prisma generate && next build` (자동 설정됨)
+   - Build Command: **`prisma generate && prisma db push && next build`** (`vercel.json`에 정의됨 — 배포 시 DB 스키마 동기화)
    - Output Directory: `.next` (기본값)
    - Install Command: `npm install` (기본값)
+
+**중요**: Vercel 프로젝트에 **`DATABASE_URL`**(Supabase PostgreSQL)이 Production/Preview 모두 설정되어 있어야 빌드가 성공합니다.
 
 ### 3.2 환경 변수 입력
 
@@ -140,9 +142,15 @@ git push origin main
 
 ### 4.1 데이터베이스 마이그레이션
 
-배포 후 첫 실행 시 데이터베이스 스키마가 적용되어 있는지 확인합니다.
-필요하면 Vercel의 "Deployments" 탭에서 "Redeploy"를 실행하거나,
-로컬에서 Supabase로 직접 마이그레이션을 실행합니다.
+배포 빌드 시 `prisma db push`가 실행되어 **스키마가 Supabase DB에 반영**됩니다 (예: `WordAudio` 음원 풀 테이블).
+
+- 빌드가 DB 연결 오류로 실패하면: Vercel 환경 변수의 `DATABASE_URL`을 확인하세요.
+- 수동으로만 적용하려면 Supabase SQL Editor에서 `supabase-schema.sql`의 `WordAudio` 구문을 실행해도 됩니다.
+
+### 4.1.1 음원 풀(WordAudio) 배포 후 확인
+
+1. 관리자 로그인 → **음원 관리** 메뉴가 보이는지 확인
+2. MP3 일괄 업로드 후 **학습 관리** → 학습 수정 → **음원 풀에서 자동 연결** 동작 확인
 
 ### 4.2 기본 관리자 계정 확인
 

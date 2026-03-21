@@ -495,17 +495,18 @@ git push -u origin main
 1. **Project Name**: 자동으로 채워짐 (변경 가능)
 2. **Framework Preset**: `Next.js` (자동 감지됨)
 3. **Root Directory**: `./` (기본값)
-4. **Build Command**: **중요!** 다음으로 설정:
+4. **Build Command**: **중요!** 저장소의 `vercel.json`이 적용되면 다음과 같습니다:
    ```
-   prisma generate && next build
+   prisma generate && prisma db push && next build
    ```
-   ⚠️ 만약 자동으로 설정되지 않았다면 수동으로 입력하세요!
+   (DB 스키마를 배포 시 Supabase에 맞춥니다. `DATABASE_URL` 필수)
+   ⚠️ Vercel UI에서 Override할 경우 위와 동일하게 입력하세요!
 5. **Output Directory**: `.next` (기본값)
 6. **Install Command**: `npm install` (기본값)
 
 **⚠️ 중요: Build Command 확인**
-- `prisma generate && next build`가 정확히 입력되어 있는지 확인하세요
-- Prisma Client를 먼저 생성한 후 Next.js를 빌드해야 합니다
+- `prisma generate && prisma db push && next build`가 적용되는지 확인하세요 (`vercel.json`)
+- Prisma Client 생성 → DB 스키마 동기화 → Next 빌드 순서입니다
 
 ### 6-4. Deploy 클릭 및 배포 실패 시 확인사항
 
@@ -533,7 +534,7 @@ git push -u origin main
 - [ ] Vercel 계정 생성 완료
 - [ ] GitHub 저장소 연결 완료
 - [ ] 프로젝트 설정 확인 완료
-- [ ] Build Command 확인: `prisma generate && next build`
+- [ ] Build Command 확인: `prisma generate && prisma db push && next build`
 - [ ] Deploy 클릭 (환경 변수 설정 전이면 실패할 수 있음 - 정상)
 
 ---

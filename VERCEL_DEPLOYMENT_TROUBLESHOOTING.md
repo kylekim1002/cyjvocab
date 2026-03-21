@@ -33,9 +33,9 @@
 
 **해결 방법:**
 1. Vercel 프로젝트 설정 → **"Settings"** → **"General"**
-2. **"Build Command"** 확인:
+2. **"Build Command"** 확인 (또는 `vercel.json` 사용 시 자동):
    ```
-   prisma generate && next build
+   prisma generate && prisma db push && next build
    ```
 3. 정확히 위와 같이 입력되어 있는지 확인
 4. 수정 후 **"Save"** 클릭
@@ -99,9 +99,10 @@
 3. `vercel.json` 파일 확인:
    ```json
    {
-     "buildCommand": "prisma generate && next build"
+     "buildCommand": "prisma generate && prisma db push && next build"
    }
    ```
+4. `prisma db push` 단계에서 실패하면 `DATABASE_URL`이 Vercel에 설정되어 있는지 확인하세요.
 
 ## 배포 성공 확인
 
