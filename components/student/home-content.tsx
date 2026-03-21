@@ -58,6 +58,8 @@ function toDateKey(date: Date) {
 function getStartBadgeClass(phase: Phase) {
   switch (phase) {
     case "wordlist":
+      // 단어목록: 다른 phase(초록/보라/빨강) 및 단어학습(파랑)과 구분
+      return "bg-teal-50 text-teal-700"
     case "wordlearning":
       return "bg-blue-50 text-blue-600"
     case "memorization":
