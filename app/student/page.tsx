@@ -49,8 +49,11 @@ export default async function StudentHomePage() {
     )
   }
 
-  // 학기/레벨 코드값(학생이 직접 추가할 때 사용할 드롭다운 데이터)
-  const [semesterCodes, levelCodes] = await Promise.all([
+  // 현재 배정된 클래스 ID 목록
+  const currentClassIds = student.studentClasses.map((sc) => sc.classId)
+
+  // 코드값 + 배정 목록을 한 번에 병렬 조회 (홈 로딩 지연 단축)
+  const [semesterCodes, levelCodes, allAssignments] = await Promise.all([
     prisma.code.findMany({
       where: { category: "SEMESTER" },
       orderBy: { order: "asc" },
@@ -61,53 +64,48 @@ export default async function StudentHomePage() {
       orderBy: { order: "asc" },
       select: { id: true, value: true, category: true },
     }),
-  ])
-
-  // 현재 배정된 클래스 ID 목록
-  const currentClassIds = student.studentClasses.map((sc) => sc.classId)
-
-  // 학생의 배정된 학습 조회 (현재 배정된 클래스의 assignment만)
-  const allAssignments = await prisma.classAssignment.findMany({
-    where: {
-      classId: { in: currentClassIds },
-      class: {
-        deletedAt: null,
+    prisma.classAssignment.findMany({
+      where: {
+        classId: { in: currentClassIds },
+        class: {
+          deletedAt: null,
+        },
       },
-    },
-    include: {
-      modules: {
-        select: {
-          id: true,
-          moduleId: true,
-          order: true,
-          source: true,
-          module: {
-            select: {
-              id: true,
-              title: true,
-              type: true,
+      include: {
+        modules: {
+          select: {
+            id: true,
+            moduleId: true,
+            order: true,
+            source: true,
+            module: {
+              select: {
+                id: true,
+                title: true,
+                type: true,
+              },
             },
           },
+          orderBy: {
+            order: "asc",
+          },
         },
-        orderBy: {
-          order: "asc",
+        progress: {
+          where: {
+            studentId: session.user.studentId,
+          },
+          select: {
+            moduleId: true,
+            progressPct: true,
+            completed: true,
+          },
         },
       },
-      progress: {
-        where: {
-          studentId: session.user.studentId,
-        },
-        select: {
-          moduleId: true,
-          progressPct: true,
-          completed: true,
-        },
+      orderBy: {
+        assignedDate: "asc",
       },
-    },
-    orderBy: {
-      assignedDate: "asc",
-    },
-  })
+    }),
+  ])
 
   // 같은 날짜 + 같은 클래스의 assignment를 하나로 합치기 (중복 방지)
   // progress가 있는 assignment를 우선적으로 사용하여 기존 학습 데이터 보존

@@ -116,6 +116,7 @@ export default async function LearningPage({
           status: { in: ["IN_PROGRESS", "COMPLETED"] },
         },
         orderBy: { updatedAt: "desc" },
+        take: 100,
       }),
     ])
 

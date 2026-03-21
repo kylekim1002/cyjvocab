@@ -18,10 +18,8 @@ export const prisma =
     },
   })
 
-// 개발 환경에서만 globalThis에 저장 (핫 리로드 방지)
-if (process.env.NODE_ENV !== 'production') {
-  globalForPrisma.prisma = prisma
-}
+// 서버리스(Vercel)에서도 인스턴스 재사용 → 연결·콜드 스타트 부담 완화
+globalForPrisma.prisma = prisma
 
 // Prisma 연결 확인 함수
 export async function checkPrismaConnection(): Promise<boolean> {

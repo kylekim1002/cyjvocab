@@ -15,7 +15,9 @@ export default async function WrongAnswerPage() {
       studentId: session.user.studentId,
     },
     include: {
-      module: true,
+      module: {
+        select: { title: true },
+      },
     },
     orderBy: {
       createdAt: "desc",

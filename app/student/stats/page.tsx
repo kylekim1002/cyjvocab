@@ -34,7 +34,11 @@ export default async function StatsPage() {
       module: {
         include: {
           items: {
-            orderBy: { order: "asc" }, // order로 정렬 보장
+            orderBy: { order: "asc" },
+            select: {
+              order: true,
+              payloadJson: true,
+            },
           },
         },
       },

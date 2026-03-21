@@ -16,17 +16,29 @@ export async function POST(
   try {
     const studentId = session.user.studentId
 
-    // 학생 정보 및 현재 배정 클래스 확인
-    const student = await prisma.student.findUnique({
-      where: { id: studentId },
-      include: {
-        studentClasses: {
-          where: {
-            endAt: null, // 현재 배정된 클래스만
+    const [student, assignment] = await Promise.all([
+      prisma.student.findUnique({
+        where: { id: studentId },
+        include: {
+          studentClasses: {
+            where: {
+              endAt: null,
+            },
           },
         },
-      },
-    })
+      }),
+      prisma.classAssignment.findUnique({
+        where: { id: params.assignmentId },
+        include: {
+          class: true,
+          modules: {
+            where: {
+              moduleId: params.moduleId,
+            },
+          },
+        },
+      }),
+    ])
 
     if (!student || student.status !== "ACTIVE") {
       return NextResponse.json(
@@ -43,17 +55,6 @@ export async function POST(
     }
 
     // Assignment 확인 및 권한 검증
-    const assignment = await prisma.classAssignment.findUnique({
-      where: { id: params.assignmentId },
-      include: {
-        class: true,
-        modules: {
-          where: {
-            moduleId: params.moduleId,
-          },
-        },
-      },
-    })
 
     if (!assignment) {
       return NextResponse.json(

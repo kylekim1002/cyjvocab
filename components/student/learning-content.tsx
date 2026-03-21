@@ -76,8 +76,6 @@ export function LearningContent({
   const [writingShowAnswer, setWritingShowAnswer] = useState<boolean>(false)
 
   useEffect(() => {
-    console.log("LearningContent useEffect", { inProgressSession, progress, sessionId, isReviewMode, completedSession, phase })
-    
     // 단어목록/암기학습/단어학습은 항상 처음부터 시작
     if (phase === "wordlist" || phase === "wordlearning" || phase === "memorization" || phase === "writing") {
       setCurrentIndex(0)
@@ -119,12 +117,6 @@ export function LearningContent({
           // 진행 중인 세션이 있으면 안내 화면 건너뛰고 바로 시험 시작
           const savedIndex = sessionPayload?.currentIndex || 0
           setCurrentIndex(savedIndex >= 0 ? savedIndex : 0)
-          console.log("Restored session answers:", {
-            sessionId: inProgressSession.id,
-            savedAnswers,
-            normalizedAnswers,
-            currentIndex: savedIndex,
-          })
           return
         } else {
         // 다른 phase의 세션이면 삭제하고 새 세션 시작
@@ -166,7 +158,6 @@ export function LearningContent({
       }
       
       const data = await response.json()
-      console.log("New session started:", data.sessionId)
       setSessionId(data.sessionId)
       setQuizAnswers({})
     } catch (error: any) {
@@ -250,30 +241,17 @@ export function LearningContent({
     setIsCompleting(true)
     setIsLoading(true)
 
-    console.log("handleComplete called", { sessionId, assignmentId, moduleId: module.id, inProgressSession })
-    
     // sessionId가 없으면 inProgressSession에서 가져오기 시도
     let currentSessionId = sessionId
     if (!currentSessionId && inProgressSession) {
       currentSessionId = inProgressSession.id
       setSessionId(currentSessionId)
-      console.log("Using sessionId from inProgressSession:", currentSessionId)
     }
 
     // sessionId가 없어도 완료 API는 세션을 찾을 수 있으므로 진행
     // API에서 세션을 자동으로 찾아서 처리함
 
     try {
-      console.log("Calling complete API", { 
-        sessionId: currentSessionId, 
-        assignmentId, 
-        moduleId: module.id,
-        phase,
-        quizAnswers,
-        quizAnswersKeys: Object.keys(quizAnswers),
-        currentIndex,
-      })
-      
       // quizAnswers의 키를 모두 숫자로 정규화하여 전달
       const normalizedQuizAnswers: Record<number, number> = {}
       Object.keys(quizAnswers).forEach((key) => {
@@ -281,14 +259,6 @@ export function LearningContent({
         if (!isNaN(numKey)) {
           normalizedQuizAnswers[numKey] = Number(quizAnswers[key])
         }
-      })
-      
-      const sortedItems = [...module.items].sort((a, b) => a.order - b.order)
-      console.log("Sending quiz answers:", {
-        original: quizAnswers,
-        normalized: normalizedQuizAnswers,
-        moduleItemsCount: sortedItems.length,
-        sortedItemsOrder: sortedItems.map((item, idx) => ({ idx, order: item.order, word: item.payloadJson?.word_text })),
       })
       
       // quizAnswers와 phase를 함께 전달
@@ -308,10 +278,7 @@ export function LearningContent({
         }
       )
 
-      console.log("Complete API response:", response.status, response.statusText)
-
       const responseText = await response.text()
-      console.log("Complete API response text:", responseText)
 
       if (!response.ok) {
         let error
@@ -331,7 +298,6 @@ export function LearningContent({
         console.error("Failed to parse response:", e, responseText)
         throw new Error("응답을 파싱할 수 없습니다.")
       }
-      console.log("Complete API success:", data)
 
       // 복습 모드가 아닐 때만 완료 처리
       if (!isReviewMode) {
@@ -339,12 +305,6 @@ export function LearningContent({
         setCompletedScore(score)
         // 정규화된 quizAnswers를 저장 (서버에 보낸 것과 동일한 형태)
         setCompletedAnswers(normalizedQuizAnswers)
-        console.log("Setting completed answers:", {
-          phase,
-          originalQuizAnswers: quizAnswers,
-          normalizedQuizAnswers,
-          score,
-        })
         setShowResultDialog(true)
         
         // 점수 표시 토스트
@@ -373,7 +333,33 @@ export function LearningContent({
       })
     } finally {
       setIsLoading(false)
+      setIsCompleting(false)
     }
+  }
+
+  /** 테스트 단계: UI는 즉시 바꾸고 저장은 백그라운드(네트워크 대기로 버튼이 느려지지 않게) */
+  const queueTestAutosaveForIndex = (targetIndex: number) => {
+    if (!sessionId) return
+    if (phase !== "test") return
+    if (module.type !== "TYPE_A" && module.type !== "TYPE_B") return
+    const normalizedQuizAnswers: Record<number, number> = {}
+    Object.keys(quizAnswers).forEach((key) => {
+      const numKey = Number(key)
+      if (!isNaN(numKey)) {
+        normalizedQuizAnswers[numKey] = Number(quizAnswers[key])
+      }
+    })
+    void fetch(`/api/student/sessions/${sessionId}/save`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        payloadJson: {
+          currentIndex: targetIndex,
+          phase,
+          quizAnswers: normalizedQuizAnswers,
+        },
+      }),
+    }).catch((error) => console.error("Auto-save error:", error))
   }
 
   const handleNext = async () => {
@@ -401,41 +387,15 @@ export function LearningContent({
     
     if (safeCurrentIndex < sortedItems.length - 1) {
       const newIndex = safeCurrentIndex + 1
-      
-      // 테스트 단계에서는 답안 자동 저장
-      if (phase === "test" && sessionId && (module.type === "TYPE_A" || module.type === "TYPE_B")) {
-        try {
-          const normalizedQuizAnswers: Record<number, number> = {}
-          Object.keys(quizAnswers).forEach((key) => {
-            const numKey = Number(key)
-            if (!isNaN(numKey)) {
-              normalizedQuizAnswers[numKey] = Number(quizAnswers[key])
-            }
-          })
-          
-          await fetch(`/api/student/sessions/${sessionId}/save`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              payloadJson: {
-                currentIndex: newIndex,
-                phase,
-                quizAnswers: normalizedQuizAnswers,
-              },
-            }),
-          })
-        } catch (error) {
-          console.error("Auto-save error:", error)
-        }
-      }
-      
+
       setCurrentIndex(newIndex)
       setShowMeaning(false) // 암기학습 토글 리셋
-      
-      // 단어학습(카드) / 암기학습 진행률 업데이트
+
+      queueTestAutosaveForIndex(newIndex)
+
+      // 단어학습(카드) / 암기학습 진행률은 UI 블로킹 없이 동기화
       if (phase === "wordlearning" || phase === "memorization") {
-        const sortedItems = [...module.items].sort((a, b) => a.order - b.order)
-        await updateProgress(newIndex)
+        void updateProgress(newIndex)
       }
     }
   }
@@ -445,36 +405,11 @@ export function LearningContent({
     const safeCurrentIndex = Math.max(0, Math.min(currentIndex, sortedItems.length - 1))
     if (safeCurrentIndex > 0) {
       const newIndex = safeCurrentIndex - 1
-      
-      // 테스트 단계에서는 답안 자동 저장
-      if (phase === "test" && sessionId && (module.type === "TYPE_A" || module.type === "TYPE_B")) {
-        try {
-          const normalizedQuizAnswers: Record<number, number> = {}
-          Object.keys(quizAnswers).forEach((key) => {
-            const numKey = Number(key)
-            if (!isNaN(numKey)) {
-              normalizedQuizAnswers[numKey] = Number(quizAnswers[key])
-            }
-          })
-          
-          await fetch(`/api/student/sessions/${sessionId}/save`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              payloadJson: {
-                currentIndex: newIndex,
-                phase,
-                quizAnswers: normalizedQuizAnswers,
-              },
-            }),
-          })
-        } catch (error) {
-          console.error("Auto-save error:", error)
-        }
-      }
-      
+
       setCurrentIndex(newIndex)
       setShowMeaning(false) // 암기학습 토글 리셋
+
+      queueTestAutosaveForIndex(newIndex)
     }
   }
 
@@ -504,7 +439,6 @@ export function LearningContent({
       }
 
       const data = await response.json()
-      console.log("Progress update success:", data)
       
       if (phase === "memorization") {
         setMemorizeMaxIndex(data.maxIndex)
@@ -554,8 +488,7 @@ export function LearningContent({
         throw new Error(errorText || "진행률 업데이트에 실패했습니다.")
       }
 
-      const data = await response.json()
-      console.log("Complete progress update:", data)
+      await response.json()
       
       toast({
         title: "완료",
@@ -903,21 +836,6 @@ export function LearningContent({
                 item.payloadJson?.choice4,
               ].filter(Boolean)
 
-                console.log(`결과 표시 - Item ${arrayIndex} (order: ${item.order}):`, {
-                  wordText: item.payloadJson?.word_text,
-                  correctIndex,
-                  correctIndexType: typeof correctIndex,
-                  studentAnswer,
-                  studentAnswerType: typeof studentAnswer,
-                  isCorrectAnswer,
-                  choices: {
-                    0: item.payloadJson?.choice1,
-                    1: item.payloadJson?.choice2,
-                    2: item.payloadJson?.choice3,
-                    3: item.payloadJson?.choice4,
-                  },
-                })
-
               return (
                 <Card key={arrayIndex} className={isCorrectAnswer ? "border-green-500" : "border-red-500"}>
                   <CardContent className="p-4">
@@ -930,6 +848,8 @@ export function LearningContent({
                             alt={item.payloadJson?.word_text || ""}
                             className="max-w-full h-auto mt-2 rounded-lg"
                             style={{ maxHeight: "200px" }}
+                            loading="lazy"
+                            decoding="async"
                           />
                         )}
                       </div>
@@ -1060,6 +980,8 @@ export function LearningContent({
                       alt={currentItem.payloadJson?.word_text || ""}
                       className="max-w-full h-auto mx-auto rounded-lg"
                       style={{ maxHeight: "300px" }}
+                      loading="lazy"
+                      decoding="async"
                     />
                   </div>
                 )}
@@ -1099,6 +1021,8 @@ export function LearningContent({
                       alt={currentItem.payloadJson?.word_text || ""}
                       className="max-w-full h-auto mx-auto rounded-lg"
                       style={{ maxHeight: "300px" }}
+                      loading="lazy"
+                      decoding="async"
                     />
                   </div>
                 )}
@@ -1195,24 +1119,8 @@ export function LearningContent({
                           }
                           className="w-full justify-start"
                           onClick={() => {
-                            // 키를 명시적으로 숫자로 변환하여 저장
-                            const sortedItems = [...module.items].sort((a, b) => a.order - b.order)
                             const newAnswers = { ...quizAnswers }
                             newAnswers[numKey] = Number(idx)
-                            console.log("Setting quiz answer (TYPE_A):", {
-                              answerKey,
-                              numKey,
-                              currentIndex,
-                              itemOrder: currentItem.order,
-                              sortedItemsOrder: sortedItems.map((item, i) => ({ index: i, order: item.order, word: item.payloadJson?.word_text })),
-                              selectedChoiceIndex: idx,
-                              correctIndex: currentItem.payloadJson?.correct_index,
-                              wordText: currentItem.payloadJson?.word_text,
-                              beforeAnswer: storedAnswer,
-                              afterAnswer: newAnswers[numKey],
-                              allAnswers: newAnswers,
-                              allAnswersKeys: Object.keys(newAnswers).map(k => ({ key: k, type: typeof k, value: newAnswers[k] })),
-                            })
                             setQuizAnswers(newAnswers)
                             // 답을 선택하면 경고 메시지 숨김
                             setShowAnswerRequired(false)
@@ -1235,6 +1143,8 @@ export function LearningContent({
                         alt={currentItem.payloadJson?.word_text || ""}
                         className="max-w-full h-auto mx-auto rounded-lg"
                         style={{ maxHeight: "300px" }}
+                        loading="lazy"
+                        decoding="async"
                       />
                     </div>
                   )}
@@ -1263,26 +1173,8 @@ export function LearningContent({
                           }
                           className="w-full justify-start"
                           onClick={() => {
-                            // 키를 명시적으로 숫자로 변환하여 저장
-                            const sortedItems = [...module.items].sort((a, b) => a.order - b.order)
                             const newAnswers = { ...quizAnswers }
                             newAnswers[numKey] = Number(idx)
-                            console.log("Setting quiz answer (TYPE_B):", { 
-                              answerKey, 
-                              numKey,
-                              currentIndex,
-                              itemOrder: currentItem.order,
-                              sortedItemsOrder: sortedItems.map((item, i) => ({ index: i, order: item.order, word: item.payloadJson?.word_text })),
-                              selectedChoiceIndex: idx, 
-                              phase, 
-                              itemId: currentItem.id, 
-                              wordText: currentItem.payloadJson?.word_text,
-                              correctIndex: currentItem.payloadJson?.correct_index,
-                              beforeAnswer: storedAnswer,
-                              afterAnswer: newAnswers[numKey],
-                              allAnswers: newAnswers,
-                              allAnswersKeys: Object.keys(newAnswers).map(k => ({ key: k, type: typeof k, value: newAnswers[k] })),
-                            })
                             setQuizAnswers(newAnswers)
                             // 답을 선택하면 경고 메시지 숨김
                             setShowAnswerRequired(false)
@@ -1334,10 +1226,7 @@ export function LearningContent({
                     return (
                       <>
                         <Button 
-                          onClick={() => {
-                            console.log("Complete button clicked", { sessionId, inProgressSession, currentIndex, moduleItemsLength: module.items.length })
-                            handleComplete()
-                          }} 
+                          onClick={() => handleComplete()} 
                           disabled={isLoading || isCompleting}
                           className={showRequired ? "bg-red-500 hover:bg-red-600 text-white" : ""}
                         >
