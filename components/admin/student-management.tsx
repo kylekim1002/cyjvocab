@@ -1052,9 +1052,9 @@ export function StudentManagement({
             </div>
           </div>
 
-          {/* 학생 목록 테이블 */}
-          <div className="overflow-x-auto">
-            <Table>
+          {/* 학생 목록 테이블 — 한 줄 정렬(줄바꿈 방지), 좁은 화면은 가로 스크롤 */}
+          <div className="overflow-x-auto rounded-md border bg-background">
+            <Table className="w-max min-w-full text-xs [&_th]:whitespace-nowrap [&_th]:px-2 [&_th]:py-2 [&_td]:px-2 [&_td]:py-2">
               <TableHeader>
                 <TableRow>
                   <TableHead>캠퍼스</TableHead>
@@ -1064,7 +1064,7 @@ export function StudentManagement({
                   <TableHead>선생님</TableHead>
                   <TableHead>학년</TableHead>
                   <TableHead>레벨</TableHead>
-                  <TableHead>학교</TableHead>
+                  <TableHead className="min-w-[7rem]">학교</TableHead>
                   <TableHead>상태</TableHead>
                   <TableHead>자동로그인 링크</TableHead>
                   <TableHead>등록일</TableHead>
@@ -1083,10 +1083,10 @@ export function StudentManagement({
                 ) : (
                   filteredStudents.map((student) => (
                     <TableRow key={student.id}>
-                      <TableCell>{student.campus.name}</TableCell>
-                      <TableCell className="font-medium">{student.name}</TableCell>
-                      <TableCell>{student.username}</TableCell>
-                      <TableCell>
+                      <TableCell className="whitespace-nowrap">{student.campus.name}</TableCell>
+                      <TableCell className="whitespace-nowrap font-medium">{student.name}</TableCell>
+                      <TableCell className="whitespace-nowrap tabular-nums">{student.username}</TableCell>
+                      <TableCell className="whitespace-nowrap max-w-[14rem]">
                         {student.studentClasses && student.studentClasses.length > 0
                           ? Array.from(
                               new Set(
@@ -1097,7 +1097,7 @@ export function StudentManagement({
                             ).join(", ")
                           : "-"}
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="whitespace-nowrap max-w-[10rem]">
                         {student.studentClasses && student.studentClasses.length > 0
                           ? Array.from(
                               new Set(
@@ -1108,10 +1108,15 @@ export function StudentManagement({
                             ).join(", ")
                           : "-"}
                       </TableCell>
-                      <TableCell>{student.grade?.value || "-"}</TableCell>
-                      <TableCell>{student.level?.value || "-"}</TableCell>
-                      <TableCell>{student.school || "-"}</TableCell>
-                      <TableCell>
+                      <TableCell className="whitespace-nowrap">{student.grade?.value || "-"}</TableCell>
+                      <TableCell className="whitespace-nowrap">{student.level?.value || "-"}</TableCell>
+                      <TableCell
+                        className="max-w-[12rem] truncate align-middle"
+                        title={student.school || undefined}
+                      >
+                        {student.school || "-"}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap">
                         <div className="flex items-center gap-3">
                           <span
                             className={`text-xs font-medium ${
@@ -1136,14 +1141,14 @@ export function StudentManagement({
                           </span>
                         </div>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="whitespace-nowrap">
                         {student.autoLoginToken ? (
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-1 shrink-0">
                             <a
                               href={`/s/auto/${student.autoLoginToken}`}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="text-blue-600 hover:underline text-sm"
+                              className="text-blue-600 hover:underline text-xs"
                             >
                               링크
                             </a>
@@ -1183,10 +1188,10 @@ export function StudentManagement({
                           "-"
                         )}
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="whitespace-nowrap tabular-nums">
                         {new Date(student.createdAt).toLocaleDateString("ko-KR")}
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="whitespace-nowrap">
                         <Button
                           variant="outline"
                           size="sm"
