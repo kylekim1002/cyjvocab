@@ -1,9 +1,9 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState, useTransition } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { ChevronLeft, ChevronRight } from "lucide-react"
+import { ChevronLeft, ChevronRight, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -91,6 +91,7 @@ export function StudentHomeContent({
   const [selectedModuleId, setSelectedModuleId] = useState<string>("")
   const [isSearching, setIsSearching] = useState(false)
   const [isAssigning, setIsAssigning] = useState(false)
+  const [isRefreshPending, startRefreshTransition] = useTransition()
   const { toast } = useToast()
 
   const assignments = useMemo(
@@ -269,9 +270,24 @@ export function StudentHomeContent({
 
       {selectedDateKey ? (
         <div className="space-y-3">
-          <div className="flex justify-end">
+          <div className="flex justify-end gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isRefreshPending}
+              onClick={() => {
+                startRefreshTransition(() => {
+                  router.refresh()
+                })
+              }}
+            >
+              <RefreshCw
+                className={cn("h-4 w-4 mr-1.5", isRefreshPending && "animate-spin")}
+              />
+              새로고침
+            </Button>
             <Button variant="outline" onClick={() => setIsAddDialogOpen(true)}>
-              추가
+              학습추가
             </Button>
           </div>
 
