@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -83,6 +83,37 @@ export function LearningManagement({
   const semesterCodes = codes.filter((c) => c.category === "SEMESTER")
   const levelCodes = codes.filter((c) => c.category === "LEVEL")
   const gradeCodes = codes.filter((c) => c.category === "GRADE")
+
+  /** 학습 목록 필터: 학기 / 레벨 / 텍스트 검색 */
+  const [filterSemesterId, setFilterSemesterId] = useState<string>("all")
+  const [filterLevelId, setFilterLevelId] = useState<string>("all")
+  const [listSearchQuery, setListSearchQuery] = useState("")
+
+  const filteredModules = useMemo(() => {
+    return modules.filter((m) => {
+      if (filterSemesterId !== "all") {
+        if (m.semester?.id !== filterSemesterId) return false
+      }
+      if (filterLevelId !== "all") {
+        if (m.level.id !== filterLevelId) return false
+      }
+      const q = listSearchQuery.trim().toLowerCase()
+      if (q) {
+        const haystack = [
+          m.title,
+          m.memo || "",
+          m.type === "TYPE_A" ? "단어+뜻" : "그림+단어+뜻",
+          m.semester?.value || "",
+          m.level.value,
+          m.grade?.value || "",
+        ]
+          .join(" ")
+          .toLowerCase()
+        if (!haystack.includes(q)) return false
+      }
+      return true
+    })
+  }, [modules, filterSemesterId, filterLevelId, listSearchQuery])
 
   // 서버에서 최신 데이터 가져오기 (성공하고 데이터가 있을 때만 업데이트)
   const refreshModules = async () => {
@@ -1137,6 +1168,51 @@ export function LearningManagement({
           <CardTitle>학습 목록</CardTitle>
         </CardHeader>
         <CardContent>
+          <div className="mb-6 flex flex-col gap-4 md:flex-row md:flex-wrap md:items-end">
+            <div className="space-y-2 min-w-[180px]">
+              <Label>학기</Label>
+              <Select value={filterSemesterId} onValueChange={setFilterSemesterId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="전체" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">전체</SelectItem>
+                  {semesterCodes.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.value}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2 min-w-[180px]">
+              <Label>레벨</Label>
+              <Select value={filterLevelId} onValueChange={setFilterLevelId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="전체" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">전체</SelectItem>
+                  {levelCodes.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.value}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2 flex-1 min-w-[200px]">
+              <Label>검색</Label>
+              <Input
+                value={listSearchQuery}
+                onChange={(e) => setListSearchQuery(e.target.value)}
+                placeholder="제목, 메모, 학기·레벨·타입 등 검색 (비워두면 전체)"
+              />
+            </div>
+          </div>
+          <p className="text-sm text-muted-foreground mb-4">
+            {filteredModules.length}개 표시 (전체 {modules.length}개)
+          </p>
           <Table>
             <TableHeader>
               <TableRow>
@@ -1152,7 +1228,14 @@ export function LearningManagement({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {modules.map((module) => (
+              {filteredModules.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
+                    조건에 맞는 학습이 없습니다.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filteredModules.map((module) => (
                 <TableRow key={module.id}>
                   <TableCell>{module.title}</TableCell>
                   <TableCell>
@@ -1201,7 +1284,8 @@ export function LearningManagement({
                     </Button>
                   </TableCell>
                 </TableRow>
-              ))}
+                ))
+              )}
             </TableBody>
           </Table>
         </CardContent>
