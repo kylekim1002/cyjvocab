@@ -904,21 +904,25 @@ export function LearningContent({
         </DialogContent>
       </Dialog>
 
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">
-          {module.title}
-          {isReviewMode && <span className="ml-2 text-sm text-muted-foreground">(복습)</span>}
-          {phase === "wordlist" && <span className="ml-2 text-sm text-muted-foreground">(단어목록)</span>}
-          {phase === "wordlearning" && <span className="ml-2 text-sm text-muted-foreground">(단어학습)</span>}
-          {phase === "memorization" && <span className="ml-2 text-sm text-muted-foreground">(암기학습)</span>}
-          {phase === "writing" && <span className="ml-2 text-sm text-muted-foreground">(쓰기학습)</span>}
-          {phase === "test" && <span className="ml-2 text-sm text-muted-foreground">(테스트)</span>}
-        </h1>
+      <div className="flex gap-3 items-start justify-between">
+        <div className="min-w-0 flex-1 pr-1">
+          <h1 className="text-lg sm:text-2xl font-bold leading-snug break-words">
+            {module.title}
+          </h1>
+          <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
+            {isReviewMode && <span className="whitespace-nowrap">(복습)</span>}
+            {phase === "wordlist" && <span className="whitespace-nowrap">(단어목록)</span>}
+            {phase === "wordlearning" && <span className="whitespace-nowrap">(단어학습)</span>}
+            {phase === "memorization" && <span className="whitespace-nowrap">(암기학습)</span>}
+            {phase === "writing" && <span className="whitespace-nowrap">(쓰기학습)</span>}
+            {phase === "test" && <span className="whitespace-nowrap">(테스트)</span>}
+          </div>
+        </div>
         <Button
           variant="outline"
           onClick={() => router.push("/student")}
           disabled={isLoading || isCheckingWriting || isCompleting}
-          className="ml-3"
+          className="shrink-0 self-center"
         >
           나가기
         </Button>
