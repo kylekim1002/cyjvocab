@@ -37,10 +37,11 @@ interface StudentHomeContentProps {
   levelCodes: Array<{ id: string; value: string }>
 }
 
-type Phase = "wordlist" | "memorization" | "writing" | "test"
+type Phase = "wordlist" | "wordlearning" | "memorization" | "writing" | "test"
 
 const phaseTabs: Array<{ key: Phase; label: string }> = [
-  { key: "wordlist", label: "단어학습" },
+  { key: "wordlist", label: "단어목록" },
+  { key: "wordlearning", label: "단어학습" },
   { key: "memorization", label: "플래시카드" },
   { key: "writing", label: "쓰기학습" },
   { key: "test", label: "테스트" },
@@ -57,6 +58,7 @@ function toDateKey(date: Date) {
 function getStartBadgeClass(phase: Phase) {
   switch (phase) {
     case "wordlist":
+    case "wordlearning":
       return "bg-blue-50 text-blue-600"
     case "memorization":
       return "bg-green-50 text-green-600"

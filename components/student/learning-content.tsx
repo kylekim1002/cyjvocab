@@ -78,8 +78,8 @@ export function LearningContent({
   useEffect(() => {
     console.log("LearningContent useEffect", { inProgressSession, progress, sessionId, isReviewMode, completedSession, phase })
     
-    // 단어목록/암기학습은 항상 처음부터 시작
-    if (phase === "wordlist" || phase === "memorization" || phase === "writing") {
+    // 단어목록/암기학습/단어학습은 항상 처음부터 시작
+    if (phase === "wordlist" || phase === "wordlearning" || phase === "memorization" || phase === "writing") {
       setCurrentIndex(0)
       // 단어목록/암기학습은 세션 없이도 작동
       return
@@ -432,8 +432,8 @@ export function LearningContent({
       setCurrentIndex(newIndex)
       setShowMeaning(false) // 암기학습 토글 리셋
       
-      // 단어목록/암기학습 진행률 업데이트
-      if (phase === "wordlist" || phase === "memorization") {
+      // 단어학습(카드) / 암기학습 진행률 업데이트
+      if (phase === "wordlearning" || phase === "memorization") {
         const sortedItems = [...module.items].sort((a, b) => a.order - b.order)
         await updateProgress(newIndex)
       }
@@ -481,7 +481,7 @@ export function LearningContent({
   // 진행률 업데이트 함수
   const updateProgress = async (index: number) => {
     try {
-      const mode = phase === "wordlist" ? "WORDLIST" : "MEMORIZE"
+      const mode = phase === "memorization" ? "MEMORIZE" : "WORDLIST"
       const sortedItems = [...module.items].sort((a, b) => a.order - b.order)
       const response = await fetch("/api/student/progress/update", {
         method: "POST",
@@ -506,10 +506,10 @@ export function LearningContent({
       const data = await response.json()
       console.log("Progress update success:", data)
       
-      if (phase === "wordlist") {
-        setWordlistMaxIndex(data.maxIndex)
-      } else {
+      if (phase === "memorization") {
         setMemorizeMaxIndex(data.maxIndex)
+      } else {
+        setWordlistMaxIndex(data.maxIndex)
       }
     } catch (error) {
       console.error("Progress update error:", error)
@@ -532,7 +532,7 @@ export function LearningContent({
     let keepLoadingOnSuccess = false
     try {
       // 쓰기학습은 진행률 저장을 MEMORIZE로 매핑
-      const mode = phase === "wordlist" ? "WORDLIST" : "MEMORIZE"
+      const mode = phase === "memorization" ? "MEMORIZE" : "WORDLIST"
       const sortedItems = [...module.items].sort((a, b) => a.order - b.order)
       // 마지막 인덱스로 진행률 업데이트 (100%)
       const response = await fetch("/api/student/progress/update", {
@@ -560,8 +560,10 @@ export function LearningContent({
       toast({
         title: "완료",
         description: `${
-          phase === "wordlist"
+          phase === "wordlearning"
             ? "단어학습"
+            : phase === "wordlist"
+            ? "단어목록"
             : phase === "writing"
             ? "쓰기학습"
             : "플래시카드"
@@ -586,8 +588,8 @@ export function LearningContent({
   }
 
   // 음성 재생 함수
-  const handlePlaySound = () => {
-    const audioUrl = currentItem?.payloadJson?.audio_url
+  const handlePlaySound = (item?: LearningItem) => {
+    const audioUrl = (item ?? currentItem)?.payloadJson?.audio_url
     
     // 음원 파일이나 링크가 있으면 재생
     if (audioUrl) {
@@ -987,6 +989,7 @@ export function LearningContent({
           {module.title}
           {isReviewMode && <span className="ml-2 text-sm text-muted-foreground">(복습)</span>}
           {phase === "wordlist" && <span className="ml-2 text-sm text-muted-foreground">(단어목록)</span>}
+          {phase === "wordlearning" && <span className="ml-2 text-sm text-muted-foreground">(단어학습)</span>}
           {phase === "memorization" && <span className="ml-2 text-sm text-muted-foreground">(암기학습)</span>}
           {phase === "writing" && <span className="ml-2 text-sm text-muted-foreground">(쓰기학습)</span>}
           {phase === "test" && <span className="ml-2 text-sm text-muted-foreground">(테스트)</span>}
@@ -1003,8 +1006,51 @@ export function LearningContent({
 
       <Card>
         <CardContent className="p-6">
-          {/* 단어목록 단계: 1개 카드로 현재 단어/뜻 표시 */}
+          {/* 단어목록 단계: 사진처럼 전체 단어/뜻을 표로 표시 */}
           {phase === "wordlist" ? (
+            <div className="space-y-4">
+              <div className="overflow-x-auto rounded-md border">
+                <table className="w-full border-collapse text-sm">
+                  <thead>
+                    <tr className="bg-gray-50">
+                      <th className="border px-2 py-2 text-left">순번</th>
+                      <th className="border px-2 py-2 text-left">단어</th>
+                      <th className="border px-2 py-2 text-left">뜻</th>
+                      <th className="border px-2 py-2 text-left">듣기</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sortedItems.map((item, idx) => (
+                      <tr
+                        key={item.id || idx}
+                        className={idx % 2 === 0 ? "bg-white" : "bg-gray-50"}
+                      >
+                        <td className="border px-2 py-2 text-xs text-muted-foreground">
+                          {idx + 1}
+                        </td>
+                        <td className="border px-2 py-2 font-medium">
+                          {item.payloadJson?.word_text || ""}
+                        </td>
+                        <td className="border px-2 py-2 text-muted-foreground">
+                          {getCorrectMeaning(item)}
+                        </td>
+                        <td className="border px-2 py-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handlePlaySound(item)}
+                          >
+                            듣기
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : phase === "wordlearning" ? (
             <div className="space-y-4">
               <div className="text-center py-12">
                 {module.type === "TYPE_B" && currentItem.payloadJson?.image_url && (
@@ -1025,7 +1071,7 @@ export function LearningContent({
                 </p>
                 <div className="flex justify-center gap-4">
                   <Button
-                    onClick={handlePlaySound}
+                    onClick={() => handlePlaySound()}
                     variant="outline"
                     size="lg"
                   >
@@ -1261,7 +1307,8 @@ export function LearningContent({
           )}
 
           {/* 네비게이션 */}
-          <div className="flex items-center justify-between mt-6">
+          {phase === "wordlist" ? null : (
+            <div className="flex items-center justify-between mt-6">
             {phase === "writing" ? null : (
               <Button
                 variant="outline"
@@ -1351,7 +1398,8 @@ export function LearningContent({
                 })()}
               </div>
             )}
-          </div>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
