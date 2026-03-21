@@ -63,10 +63,16 @@ export default async function ClassesPage() {
       id: cls.id,
       name: cls.name,
       createdAt: cls.createdAt,
+      campusId: cls.campusId,
+      levelId: cls.levelId,
+      gradeId: cls.gradeId,
+      teacherId: cls.teacherId,
       campus: cls.campus || { id: "", name: "" },
-      level: cls.level || { value: "" },
-      grade: cls.grade || { value: "" },
-      teacher: cls.teacher || { name: "" },
+      level: cls.level ? { id: cls.level.id, value: cls.level.value } : { value: "" },
+      grade: cls.grade ? { id: cls.grade.id, value: cls.grade.value } : { value: "" },
+      teacher: cls.teacher
+        ? { id: cls.teacher.id, name: cls.teacher.name }
+        : { name: "" },
     }))
 
   return (

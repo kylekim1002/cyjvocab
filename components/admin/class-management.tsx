@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Plus, Trash2, Users, BookOpen, ChevronDown, ChevronRight } from "lucide-react"
+import { Plus, Trash2, Users, BookOpen, ChevronDown, ChevronRight, Pencil } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
 import Link from "next/link"
 
@@ -17,10 +17,14 @@ interface Class {
   id: string
   name: string
   createdAt: Date
+  campusId: string
+  levelId: string
+  gradeId: string
+  teacherId: string
   campus: { id: string; name: string }
-  level: { value: string }
-  grade: { value: string }
-  teacher: { name: string }
+  level: { id?: string; value: string }
+  grade: { id?: string; value: string }
+  teacher: { id?: string; name: string }
 }
 
 interface Campus {
@@ -61,10 +65,20 @@ export function ClassManagement({
             id: cls.id,
             name: cls.name,
             createdAt: cls.createdAt,
+            campusId: cls.campusId,
+            levelId: cls.levelId,
+            gradeId: cls.gradeId,
+            teacherId: cls.teacherId,
             campus: cls.campus || { id: "", name: "" },
-            level: cls.level || { value: "" },
-            grade: cls.grade || { value: "" },
-            teacher: cls.teacher || { name: "" },
+            level: cls.level
+              ? { id: cls.level.id, value: cls.level.value }
+              : { value: "" },
+            grade: cls.grade
+              ? { id: cls.grade.id, value: cls.grade.value }
+              : { value: "" },
+            teacher: cls.teacher
+              ? { id: cls.teacher.id, name: cls.teacher.name }
+              : { name: "" },
           }))
           setClasses(transformedClasses)
           console.log("Refreshed classes:", transformedClasses.length)
@@ -94,6 +108,18 @@ export function ClassManagement({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   const [isDialogOpen, setIsDialogOpen] = useState(false)
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+  const [editingClassId, setEditingClassId] = useState<string | null>(null)
+  const [editFormData, setEditFormData] = useState({
+    name: "",
+    campusId: "",
+    levelId: "",
+    gradeId: "",
+    teacherId: "",
+  })
+  const [editCampusTeachers, setEditCampusTeachers] = useState<
+    Array<{ id: string; name: string }>
+  >([])
   const [isStudentAssignDialogOpen, setIsStudentAssignDialogOpen] = useState(false)
   const [isLearningAssignDialogOpen, setIsLearningAssignDialogOpen] = useState(false)
   const [selectedClass, setSelectedClass] = useState<Class | null>(null)
@@ -180,6 +206,81 @@ export function ClassManagement({
       toast({
         title: "오류",
         description: "클래스 생성에 실패했습니다.",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const handleEditCampusChange = (campusId: string) => {
+    const campus = campuses.find((c) => c.id === campusId)
+    setEditCampusTeachers(campus?.teachers || [])
+    setEditFormData((prev) => ({ ...prev, campusId, teacherId: "" }))
+  }
+
+  const openEditDialog = (e: React.MouseEvent, cls: Class) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (!cls.campusId || !cls.levelId || !cls.gradeId || !cls.teacherId) {
+      toast({
+        title: "오류",
+        description: "클래스 정보가 불완전합니다. 페이지를 새로고침한 뒤 다시 시도해주세요.",
+        variant: "destructive",
+      })
+      return
+    }
+    const campus = campuses.find((c) => c.id === cls.campusId)
+    setEditCampusTeachers(campus?.teachers || [])
+    setEditFormData({
+      name: cls.name,
+      campusId: cls.campusId,
+      levelId: cls.levelId,
+      gradeId: cls.gradeId,
+      teacherId: cls.teacherId,
+    })
+    setEditingClassId(cls.id)
+    setIsEditDialogOpen(true)
+  }
+
+  const handleEditSubmit = async () => {
+    if (
+      !editingClassId ||
+      !editFormData.name?.trim() ||
+      !editFormData.campusId ||
+      !editFormData.levelId ||
+      !editFormData.gradeId ||
+      !editFormData.teacherId
+    ) {
+      toast({
+        title: "오류",
+        description: "모든 필드를 입력해주세요.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    try {
+      const response = await fetch(`/api/admin/classes/${editingClassId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(editFormData),
+      })
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}))
+        throw new Error(err.error || "수정 실패")
+      }
+
+      toast({
+        title: "성공",
+        description: "클래스 정보가 수정되었습니다.",
+      })
+      setIsEditDialogOpen(false)
+      setEditingClassId(null)
+      window.location.reload()
+    } catch (error: any) {
+      toast({
+        title: "오류",
+        description: error?.message || "클래스 수정에 실패했습니다.",
         variant: "destructive",
       })
     }
@@ -794,6 +895,120 @@ export function ClassManagement({
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>클래스 수정</DialogTitle>
+              <DialogDescription>
+                등록된 클래스의 반명, 캠퍼스, 레벨, 학년, 담당 선생님을 변경할 수 있습니다.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <Label>반명</Label>
+                <Input
+                  value={editFormData.name}
+                  onChange={(e) =>
+                    setEditFormData({ ...editFormData, name: e.target.value })
+                  }
+                  placeholder="예: 1반"
+                />
+              </div>
+              <div>
+                <Label>캠퍼스</Label>
+                <Select
+                  value={editFormData.campusId}
+                  onValueChange={handleEditCampusChange}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="캠퍼스 선택" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {campuses.map((campus) => (
+                      <SelectItem key={campus.id} value={campus.id}>
+                        {campus.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>레벨</Label>
+                <Select
+                  value={editFormData.levelId}
+                  onValueChange={(v) =>
+                    setEditFormData({ ...editFormData, levelId: v })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="레벨 선택" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {levelCodes.map((code) => (
+                      <SelectItem key={code.id} value={code.id}>
+                        {code.value}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>학년</Label>
+                <Select
+                  value={editFormData.gradeId}
+                  onValueChange={(v) =>
+                    setEditFormData({ ...editFormData, gradeId: v })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="학년 선택" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {gradeCodes.map((code) => (
+                      <SelectItem key={code.id} value={code.id}>
+                        {code.value}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>선생님</Label>
+                <Select
+                  value={editFormData.teacherId}
+                  onValueChange={(v) =>
+                    setEditFormData({ ...editFormData, teacherId: v })
+                  }
+                  disabled={editCampusTeachers.length === 0}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="선생님 선택" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {editCampusTeachers.map((teacher) => (
+                      <SelectItem key={teacher.id} value={teacher.id}>
+                        {teacher.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsEditDialogOpen(false)}
+              >
+                취소
+              </Button>
+              <Button type="button" onClick={handleEditSubmit}>
+                저장
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
 
       <Card>
@@ -977,6 +1192,16 @@ export function ClassManagement({
                         variant="outline"
                         size="sm"
                         className="relative z-10"
+                        title="클래스 정보 수정"
+                        onClick={(e) => openEditDialog(e, cls)}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="relative z-10"
                         onClick={(e) => {
                           e.preventDefault()
                           e.stopPropagation()
@@ -1030,7 +1255,12 @@ export function ClassManagement({
                         type="button"
                         variant="destructive"
                         size="sm"
-                        onClick={() => handleDelete(cls.id)}
+                        className="relative z-10"
+                        onClick={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          handleDelete(cls.id)
+                        }}
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
