@@ -602,15 +602,18 @@ export function LearningManagement({
           continue
         }
 
-        // correct_index 검증 (0: 보기1, 1: 보기2, 2: 보기3, 3: 보기4)
-        const correctIndex = row.correct_index !== undefined && row.correct_index !== null
-          ? Number(row.correct_index)
-          : -1
-        
+        // correct_index: 내부는 0~3(보기1~4). 엑셀에서 흔한 1~4(1번째~4번째 보기)도 허용해 자동 변환
+        let correctIndex =
+          row.correct_index !== undefined && row.correct_index !== null
+            ? Number(row.correct_index)
+            : NaN
+        if (!isNaN(correctIndex) && correctIndex >= 1 && correctIndex <= 4) {
+          correctIndex = correctIndex - 1
+        }
         if (isNaN(correctIndex) || correctIndex < 0 || correctIndex > 3) {
           errors.push({
             row: rowNum,
-            reason: `correct_index가 유효하지 않습니다. (0: 보기1, 1: 보기2, 2: 보기3, 3: 보기4)`,
+            reason: `correct_index가 유효하지 않습니다. (엑셀: 1~4번 보기 또는 0~3 인덱스)`,
           })
           continue
         }
@@ -996,7 +999,7 @@ export function LearningManagement({
                       onChange={handleExcelUpload}
                     />
                     <p className="text-sm text-muted-foreground mt-2">
-                      컬럼: type, semester, level, grade(없음 허용), word_text, image_url (TYPE_B만), choice1, choice2, choice3, choice4, correct_index (0: 보기1, 1: 보기2, 2: 보기3, 3: 보기4)
+                      컬럼: type, semester, level, grade(없음 허용), word_text, image_url (TYPE_B만), choice1, choice2, choice3, choice4, correct_index (엑셀 1~4번 보기 또는 0~3 인덱스)
                     </p>
                   </div>
                 )}
