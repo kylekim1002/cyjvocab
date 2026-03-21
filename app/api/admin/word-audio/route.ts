@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth-options"
 import { prisma } from "@/lib/prisma"
 import { supabase, STORAGE_BUCKET, isSupabaseConfigured } from "@/lib/supabase"
-import { normalizedKeyFromFilename } from "@/lib/word-audio"
+import { normalizedKeyFromFilename, wordAudioTableMissingMessage } from "@/lib/word-audio"
 
 export async function GET() {
   const session = await getServerSession(authOptions)
@@ -19,8 +19,9 @@ export async function GET() {
     return NextResponse.json(rows)
   } catch (e: any) {
     console.error("word-audio GET:", e)
+    const msg = e.message || "목록을 불러오지 못했습니다."
     return NextResponse.json(
-      { error: e.message || "목록을 불러오지 못했습니다." },
+      { error: wordAudioTableMissingMessage(msg) },
       { status: 500 }
     )
   }
@@ -160,8 +161,9 @@ export async function POST(request: Request) {
     })
   } catch (e: any) {
     console.error("word-audio POST:", e)
+    const msg = e.message || "업로드에 실패했습니다."
     return NextResponse.json(
-      { error: e.message || "업로드에 실패했습니다." },
+      { error: wordAudioTableMissingMessage(msg) },
       { status: 500 }
     )
   }

@@ -18,3 +18,17 @@ export function normalizedKeyFromFilename(filename: string): string {
   const base = filename.replace(/\.[^/.]+$/, "")
   return normalizeWordAudioKey(base)
 }
+
+/** Prisma: 테이블 미생성(P2021 등) 시 관리자에게 안내 */
+export function wordAudioTableMissingMessage(raw: string): string {
+  const hint =
+    " DB에 WordAudio 테이블이 없습니다. Supabase → SQL Editor에서 프로젝트의 scripts/add-word-audio-table.sql 전체를 실행한 뒤 다시 시도하세요."
+  if (
+    raw.includes("WordAudio") ||
+    raw.includes("does not exist") ||
+    raw.includes("P2021")
+  ) {
+    return raw + hint
+  }
+  return raw
+}

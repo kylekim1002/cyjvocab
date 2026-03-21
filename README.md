@@ -130,6 +130,10 @@ npm run dev
 3. **배포 완료**
    - 자동 배포 또는 수동 배포
 
+4. **음원 관리(WordAudio) 사용 시 — DB에 테이블 1회 생성**  
+   Vercel 빌드에서는 `prisma db push`를 실행하지 않으므로, **Supabase → SQL Editor**에서 [`scripts/add-word-audio-table.sql`](./scripts/add-word-audio-table.sql) 내용을 실행하세요.  
+   그렇지 않으면 `The table public.WordAudio does not exist` 오류가 납니다.
+
 ## 프로젝트 구조
 
 ```

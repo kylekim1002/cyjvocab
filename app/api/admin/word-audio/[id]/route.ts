@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth-options"
 import { prisma } from "@/lib/prisma"
+import { wordAudioTableMissingMessage } from "@/lib/word-audio"
 import { supabase, STORAGE_BUCKET, isSupabaseConfigured } from "@/lib/supabase"
 
 export async function DELETE(
@@ -40,8 +41,9 @@ export async function DELETE(
     return NextResponse.json({ ok: true })
   } catch (e: any) {
     console.error("word-audio DELETE:", e)
+    const msg = e.message || "삭제에 실패했습니다."
     return NextResponse.json(
-      { error: e.message || "삭제에 실패했습니다." },
+      { error: wordAudioTableMissingMessage(msg) },
       { status: 500 }
     )
   }
