@@ -22,6 +22,7 @@ export default async function WrongAnswerPage() {
     orderBy: {
       createdAt: "desc",
     },
+    take: 400,
   })
 
   return <WrongAnswerList wrongAnswers={wrongAnswers} />

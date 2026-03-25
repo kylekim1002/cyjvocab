@@ -2,7 +2,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth-options"
 import { CampusManagement } from "@/components/admin/campus-management"
 import { prisma } from "@/lib/prisma"
-import { Campus, Teacher } from "@prisma/client"
+import { Campus } from "@prisma/client"
 
 export default async function CampusPage() {
   try {
@@ -12,7 +12,7 @@ export default async function CampusPage() {
     return null
   }
 
-    let campuses: (Campus & { teachers: Teacher[] })[] = []
+    let campuses: (Campus & { teachers: Array<{ id: string; name: string }> })[] = []
     try {
       campuses = await prisma.campus.findMany({
         include: {
@@ -22,7 +22,6 @@ export default async function CampusPage() {
         },
         orderBy: { name: "asc" },
       })
-      console.log("Fetched campuses:", campuses.length)
     } catch (error) {
       console.error("Error fetching campuses:", error)
       // 에러가 발생해도 빈 배열로 계속 진행 (컴포넌트에서 처리)

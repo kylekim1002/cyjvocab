@@ -1,11 +1,12 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef } from "react"
+import { useState, useEffect, useCallback, useRef, useMemo } from "react"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useToast } from "@/components/ui/use-toast"
-import { Upload, Trash2, RefreshCw } from "lucide-react"
+import { Upload, Trash2, RefreshCw, Search } from "lucide-react"
 import { normalizeWordAudioKey } from "@/lib/word-audio"
 
 type WordAudioRow = {
@@ -21,9 +22,22 @@ export function WordAudioManagement() {
   const { toast } = useToast()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [rows, setRows] = useState<WordAudioRow[]>([])
+  const [searchQuery, setSearchQuery] = useState("")
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+
+  const filteredRows = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase()
+    if (!q) return rows
+    return rows.filter(
+      (r) =>
+        r.normalizedKey.toLowerCase().includes(q) ||
+        r.originalFilename.toLowerCase().includes(q) ||
+        r.publicUrl.toLowerCase().includes(q) ||
+        r.storagePath.toLowerCase().includes(q)
+    )
+  }, [rows, searchQuery])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -149,6 +163,25 @@ export function WordAudioManagement() {
           정규화 키 예: 단어 &quot;Hello&quot; → <code>{normalizeWordAudioKey("Hello")}</code>
         </p>
 
+        <div className="space-y-2">
+          <div className="relative max-w-md">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+            <Input
+              type="search"
+              placeholder="키, 파일명, 경로로 검색…"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9"
+              aria-label="음원 검색"
+            />
+          </div>
+          {!loading && rows.length > 0 && (
+            <p className="text-xs text-muted-foreground">
+              {filteredRows.length}개 표시 (전체 {rows.length}개)
+            </p>
+          )}
+        </div>
+
         <div className="rounded-md border">
           <Table>
             <TableHeader>
@@ -170,8 +203,14 @@ export function WordAudioManagement() {
                     등록된 음원이 없습니다.
                   </TableCell>
                 </TableRow>
+              ) : filteredRows.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={4} className="text-muted-foreground">
+                    검색 결과가 없습니다.
+                  </TableCell>
+                </TableRow>
               ) : (
-                rows.map((r) => (
+                filteredRows.map((r) => (
                   <TableRow key={r.id}>
                     <TableCell className="font-mono text-sm">{r.normalizedKey}</TableCell>
                     <TableCell className="text-sm">{r.originalFilename}</TableCell>

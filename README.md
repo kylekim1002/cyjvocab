@@ -54,8 +54,10 @@ SUPABASE_SERVICE_ROLE_KEY=[YOUR-SERVICE-ROLE-KEY]
 
 # 데이터베이스 (Supabase PostgreSQL 또는 로컬 PostgreSQL)
 DATABASE_URL="postgresql://user:password@localhost:5432/dbname?schema=public"
-# 또는 Supabase 사용 시:
-# DATABASE_URL="postgresql://postgres:[PASSWORD]@[PROJECT-REF].supabase.co:5432/postgres"
+# Prisma migrate용 직접 연결 (로컬 단일 URL이면 DATABASE_URL과 동일 값으로 두면 됨)
+DIRECT_URL="postgresql://user:password@localhost:5432/dbname?schema=public"
+# Vercel + Supabase 프로덕션: 런타임은 **Transaction pooler**(예: 포트 6543)를 DATABASE_URL에,
+# 마이그레이션은 **Direct**(포트 5432)를 DIRECT_URL에 두는 것을 권장합니다. (`.env.example` 참고)
 
 # NextAuth 설정
 NEXTAUTH_URL="http://localhost:3000"
@@ -75,8 +77,11 @@ NODE_ENV="development"
 
 #### Supabase 사용 (프로덕션 권장)
 1. [Supabase](https://supabase.com)에서 프로젝트 생성
-2. 프로젝트 설정에서 Database URL 확인
-3. `DATABASE_URL`에 연결 문자열 설정
+2. **Database** → *Connection string*에서  
+   - 앱/서버리스용: **Transaction pooler** (Prisma 등) → `DATABASE_URL`  
+   - `prisma migrate` / `db push`용: **Direct connection** → `DIRECT_URL`  
+   (로컬 개발만 할 때는 둘 다 동일한 직접 연결 URL이어도 됩니다.)
+3. Vercel 등 배포 환경에 `DATABASE_URL`·`DIRECT_URL`·`NEXTAUTH_*` 모두 설정
 4. Storage 버킷 생성: `learning-audio` (Public, 10MB 제한)
 
 ### 4. Prisma 마이그레이션

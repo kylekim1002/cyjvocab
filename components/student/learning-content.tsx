@@ -1172,10 +1172,10 @@ export function LearningContent({
                           {idx + 1}
                         </td>
                         <td className="border px-2 py-2 font-medium">
-                          {item.payloadJson?.word_text || ""}
+                          {getCorrectMeaning(item)}
                         </td>
                         <td className="border px-2 py-2 text-muted-foreground">
-                          {getCorrectMeaning(item)}
+                          {item.payloadJson?.word_text || ""}
                         </td>
                         <td className="border px-2 py-2">
                           <Button

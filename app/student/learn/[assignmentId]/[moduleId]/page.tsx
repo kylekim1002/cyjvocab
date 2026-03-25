@@ -1,20 +1,10 @@
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth-options"
 import { redirect } from "next/navigation"
-import dynamic from "next/dynamic"
 import { prisma } from "@/lib/prisma"
-import { LearningPageLoading } from "@/components/student/learning-page-loading"
+import { LearningContent } from "@/components/student/learning-content"
 
-const LearningContent = dynamic(
-  () =>
-    import("@/components/student/learning-content").then((mod) => ({
-      default: mod.LearningContent,
-    })),
-  {
-    loading: () => <LearningPageLoading />,
-  }
-)
-
+/** 학습 본문은 정적 import — dynamic 청크 분리 시 추가 네트워크 왕복으로 체감 지연될 수 있어 통합 */
 const SESSION_PHASE_SCAN_LIMIT = 30
 
 const sessionSelect = {
@@ -57,10 +47,37 @@ export default async function LearningPage({
       redirect("/student")
     }
 
-    // 학생/배정/모듈을 병렬 조회해 페이지 전환 지연 최소화
-    const [student, assignment, module] = await Promise.all([
+    const studentId = session.user.studentId
+    // 캘린더/다른 진입 경로에서 phase 파라미터가 영문키(wordlist/...) 또는 한글 라벨(쓰기학습)로 들어올 수 있어 정규화
+    const rawPhase = searchParams?.phase || "test"
+    const phase = (() => {
+      const p = String(rawPhase).trim().toLowerCase()
+      if (p === "wordlist" || p === "단어목록") return "wordlist"
+      if (p === "wordlearning" || p === "단어학습") return "wordlearning"
+      if (p === "memorization" || p === "플래시카드" || p === "암기학습") return "memorization"
+      if (p === "writing" || p === "쓰기학습") return "writing"
+      if (p === "test" || p === "테스트") return "test"
+      return "test"
+    })()
+    const isReviewMode = searchParams?.review === "true"
+
+    const sessionWhere = {
+      studentId,
+      assignmentId: params.assignmentId,
+      moduleId: params.moduleId,
+    }
+
+    // 학생·배정·모듈·진행·세션 후보를 한 번에 병렬 조회 → DB 왕복 1회로 체감 지연 감소
+    const [
+      student,
+      assignment,
+      module,
+      progress,
+      inProgressCandidates,
+      completedCandidates,
+    ] = await Promise.all([
       prisma.student.findUnique({
-        where: { id: session.user.studentId },
+        where: { id: studentId },
         select: {
           status: true,
           studentClasses: {
@@ -100,6 +117,27 @@ export default async function LearningPage({
           },
         },
       }),
+      prisma.studentAssignmentProgress.findUnique({
+        where: {
+          studentId_assignmentId_moduleId: {
+            studentId,
+            assignmentId: params.assignmentId,
+            moduleId: params.moduleId,
+          },
+        },
+      }),
+      prisma.studySession.findMany({
+        where: { ...sessionWhere, status: "IN_PROGRESS" },
+        orderBy: { updatedAt: "desc" },
+        take: SESSION_PHASE_SCAN_LIMIT,
+        select: sessionSelect,
+      }),
+      prisma.studySession.findMany({
+        where: { ...sessionWhere, status: "COMPLETED" },
+        orderBy: { updatedAt: "desc" },
+        take: SESSION_PHASE_SCAN_LIMIT,
+        select: sessionSelect,
+      }),
     ])
 
     if (!student || student.status !== "ACTIVE") {
@@ -131,44 +169,6 @@ export default async function LearningPage({
     if (!module) {
       redirect("/student")
     }
-
-    // 복습 모드 확인
-    const isReviewMode = searchParams?.review === "true"
-    // 단계 확인 (wordlist, memorization, test, finaltest)
-    const phase = searchParams?.phase || "test" // 기본값은 test
-    const studentId = session.user.studentId
-
-    const sessionWhere = {
-      studentId,
-      assignmentId: params.assignmentId,
-      moduleId: params.moduleId,
-    }
-
-    // 진행/완료 세션을 분리·상한 조회 — 100건 혼합 스캔 대신 최근 N건만 (payload만 전달)
-    const [progress, inProgressCandidates, completedCandidates] =
-      await Promise.all([
-        prisma.studentAssignmentProgress.findUnique({
-          where: {
-            studentId_assignmentId_moduleId: {
-              studentId,
-              assignmentId: params.assignmentId,
-              moduleId: params.moduleId,
-            },
-          },
-        }),
-        prisma.studySession.findMany({
-          where: { ...sessionWhere, status: "IN_PROGRESS" },
-          orderBy: { updatedAt: "desc" },
-          take: SESSION_PHASE_SCAN_LIMIT,
-          select: sessionSelect,
-        }),
-        prisma.studySession.findMany({
-          where: { ...sessionWhere, status: "COMPLETED" },
-          orderBy: { updatedAt: "desc" },
-          take: SESSION_PHASE_SCAN_LIMIT,
-          select: sessionSelect,
-        }),
-      ])
 
     const inProgressSession = findSessionForPhase(inProgressCandidates, phase)
     const completedSession = findSessionForPhase(completedCandidates, phase)

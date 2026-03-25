@@ -157,6 +157,14 @@ export function ClassManagement({
   const [filterType, setFilterType] = useState<"all" | "level" | "grade" | "teacher">("all")
   const [filterValue, setFilterValue] = useState<string>("")
   const [isLoading, setIsLoading] = useState(false)
+  const [classNameSortOrder, setClassNameSortOrder] = useState<"asc" | "desc">("asc")
+
+  const getAvailableModuleItemCount = (module: any) => {
+    if (typeof module?.itemCount === "number") return module.itemCount
+    if (typeof module?._count?.items === "number") return module._count.items
+    if (Array.isArray(module?.items)) return module.items.length
+    return 0
+  }
 
   // 디버깅: 다이얼로그 상태 변경 추적
   useEffect(() => {
@@ -665,6 +673,14 @@ export function ClassManagement({
     setExpandedClasses(newExpanded)
   }
 
+  const sortedClasses = [...classes].sort((a, b) => {
+    const left = (a.name || "").trim()
+    const right = (b.name || "").trim()
+    return classNameSortOrder === "asc"
+      ? left.localeCompare(right, "ko")
+      : right.localeCompare(left, "ko")
+  })
+
   // 레벨 선택 시 학습 목록 필터링
   const handleLevelChange = async (levelId: string) => {
     setSelectedLevelId(levelId)
@@ -1139,20 +1155,30 @@ export function ClassManagement({
               </div>
             </div>
           </div>
+          <div className="overflow-x-auto rounded-md border">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>반명</TableHead>
-                <TableHead>캠퍼스</TableHead>
-                <TableHead>레벨</TableHead>
-                <TableHead>학년</TableHead>
-                <TableHead>선생님</TableHead>
-                <TableHead>생성일</TableHead>
-                <TableHead>작업</TableHead>
+                <TableHead className="whitespace-nowrap min-w-[15rem]">
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1"
+                    onClick={() => setClassNameSortOrder((prev) => (prev === "asc" ? "desc" : "asc"))}
+                    title={`반명 ${classNameSortOrder === "asc" ? "오름차순" : "내림차순"} 정렬`}
+                  >
+                    반명 {classNameSortOrder === "asc" ? "▲" : "▼"}
+                  </button>
+                </TableHead>
+                <TableHead className="whitespace-nowrap min-w-[8rem]">캠퍼스</TableHead>
+                <TableHead className="whitespace-nowrap min-w-[6rem]">레벨</TableHead>
+                <TableHead className="whitespace-nowrap min-w-[5rem]">학년</TableHead>
+                <TableHead className="whitespace-nowrap min-w-[6rem]">선생님</TableHead>
+                <TableHead className="whitespace-nowrap min-w-[6rem]">생성일</TableHead>
+                <TableHead className="whitespace-nowrap min-w-[12rem] text-center">작업</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {classes.map((cls) => {
+              {sortedClasses.map((cls) => {
                 const isExpanded = expandedClasses.has(cls.id)
                 const students = classStudents[cls.id] || []
                 
@@ -1162,7 +1188,7 @@ export function ClassManagement({
                       className="cursor-pointer hover:bg-gray-50"
                       onClick={() => handleClassRowClick(cls.id)}
                     >
-                      <TableCell>
+                      <TableCell className="align-middle">
                         <div className="flex items-center gap-2">
                           {isExpanded ? (
                             <ChevronDown className="h-4 w-4 text-gray-500" />
@@ -1171,22 +1197,23 @@ export function ClassManagement({
                           )}
                           <Link
                             href={`/admin/classes/${cls.id}`}
-                            className="text-primary hover:underline"
+                            className="text-primary hover:underline truncate max-w-[12rem] sm:max-w-[16rem]"
+                            title={cls.name}
                             onClick={(e) => e.stopPropagation()}
                           >
                             {cls.name}
                           </Link>
                         </div>
                       </TableCell>
-                      <TableCell>{cls.campus.name}</TableCell>
-                      <TableCell>{cls.level.value}</TableCell>
-                      <TableCell>{cls.grade.value}</TableCell>
-                      <TableCell>{cls.teacher.name}</TableCell>
-                      <TableCell>
+                      <TableCell className="whitespace-nowrap">{cls.campus.name}</TableCell>
+                      <TableCell className="whitespace-nowrap">{cls.level.value}</TableCell>
+                      <TableCell className="whitespace-nowrap">{cls.grade.value}</TableCell>
+                      <TableCell className="whitespace-nowrap">{cls.teacher.name}</TableCell>
+                      <TableCell className="whitespace-nowrap tabular-nums">
                         {new Date(cls.createdAt).toLocaleDateString("ko-KR")}
                       </TableCell>
                       <TableCell>
-                    <div className="flex gap-2">
+                    <div className="flex items-center justify-center gap-2 whitespace-nowrap">
                       <Button
                         type="button"
                         variant="outline"
@@ -1314,6 +1341,7 @@ export function ClassManagement({
               })}
             </TableBody>
           </Table>
+          </div>
         </CardContent>
       </Card>
 
@@ -1550,7 +1578,7 @@ export function ClassManagement({
                                 .filter((m) => !newModuleIds.includes(m.id) || m.id === moduleId)
                                 .map((module) => (
                                   <SelectItem key={module.id} value={module.id}>
-                                    {module.title} ({module.items?.length || 0}문항)
+                                    {module.title} ({getAvailableModuleItemCount(module)}문항)
                                   </SelectItem>
                                 ))}
                             </SelectContent>

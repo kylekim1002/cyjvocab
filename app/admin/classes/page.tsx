@@ -12,52 +12,38 @@ export default async function ClassesPage() {
     return null
   }
 
-    let classes: (Class & { campus: { id: string; name: string } | null; level: Code | null; grade: Code | null; teacher: Teacher | null })[] = []
-    let campuses: (Campus & { teachers: Teacher[] })[] = []
-    let codes: Code[] = []
-
-    try {
-      [classes, campuses, codes] = await Promise.all([
-        prisma.class.findMany({
-          where: { deletedAt: null },
-          include: {
-            campus: {
-              select: {
-                id: true,
-                name: true,
-              },
-            },
-            level: true,
-            grade: true,
-            teacher: true,
-          },
-          orderBy: { createdAt: "desc" },
-        }),
-        prisma.campus.findMany({
-          include: {
-            teachers: {
-              orderBy: { name: "asc" },
+    const [classes, campuses, codes] = await Promise.all([
+      prisma.class.findMany({
+        where: { deletedAt: null },
+        include: {
+          campus: {
+            select: {
+              id: true,
+              name: true,
             },
           },
-          orderBy: { name: "asc" },
-        }),
-        prisma.code.findMany({
-          orderBy: [
-            { category: "asc" },
-            { order: "asc" },
-          ],
-        }),
-      ])
-      console.log("Fetched classes data:", {
-        classes: classes.length,
-        campuses: campuses.length,
-        codes: codes.length,
-      })
-    } catch (error) {
-      console.error("Error fetching classes data:", error)
-      // 에러가 발생해도 빈 배열로 계속 진행 (컴포넌트에서 처리)
-    }
-
+          level: { select: { id: true, value: true } },
+          grade: { select: { id: true, value: true } },
+          teacher: { select: { id: true, name: true } },
+        },
+        orderBy: { createdAt: "desc" },
+      }),
+      prisma.campus.findMany({
+        include: {
+          teachers: {
+            orderBy: { name: "asc" },
+            select: { id: true, name: true },
+          },
+        },
+        orderBy: { name: "asc" },
+      }),
+      prisma.code.findMany({
+        orderBy: [
+          { category: "asc" },
+          { order: "asc" },
+        ],
+      }),
+    ])
     // ClassManagement 컴포넌트가 기대하는 타입으로 변환
     const transformedClasses = classes.map((cls) => ({
       id: cls.id,

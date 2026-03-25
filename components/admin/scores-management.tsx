@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -30,8 +30,9 @@ interface ScoreData {
   grade: string
   level: string
   moduleTitle: string
-  wordProgressPct: number
-  memorizationProgressPct: number
+  wordLearningProgressPct: number
+  flashcardProgressPct: number
+  writingProgressPct: number
   testBestScorePct: number | null
 }
 
@@ -42,6 +43,7 @@ interface ScoresManagementProps {
 
 export function ScoresManagement({ campuses, codes }: ScoresManagementProps) {
   const { toast } = useToast()
+  const [campusOptions, setCampusOptions] = useState<Campus[]>(campuses)
   const [campusId, setCampusId] = useState<string>("")
   const [dateFrom, setDateFrom] = useState<string>("")
   const [dateTo, setDateTo] = useState<string>("")
@@ -64,6 +66,27 @@ export function ScoresManagement({ campuses, codes }: ScoresManagementProps) {
 
   const gradeCodes = codes.filter((c) => c.category === "GRADE")
   const levelCodes = codes.filter((c) => c.category === "LEVEL")
+
+  useEffect(() => {
+    setCampusOptions(campuses)
+  }, [campuses])
+
+  // 일반 관리자 환경에서 서버 props가 비어오는 경우를 대비한 폴백
+  useEffect(() => {
+    if (campusOptions.length > 0) return
+    ;(async () => {
+      try {
+        const res = await fetch("/api/admin/student-form-meta", { cache: "no-store" })
+        if (!res.ok) return
+        const data = await res.json()
+        if (Array.isArray(data.campuses) && data.campuses.length > 0) {
+          setCampusOptions(data.campuses)
+        }
+      } catch (e) {
+        console.error("Failed to fetch campus options:", e)
+      }
+    })()
+  }, [campusOptions.length])
 
   // 캠퍼스 선택 시 클래스 및 선생님 목록 조회
   const handleCampusChange = async (value: string) => {
@@ -250,7 +273,7 @@ export function ScoresManagement({ campuses, codes }: ScoresManagementProps) {
                   <SelectValue placeholder="캠퍼스 선택" />
                 </SelectTrigger>
                 <SelectContent>
-                  {campuses.map((campus) => (
+                  {campusOptions.map((campus) => (
                     <SelectItem key={campus.id} value={campus.id}>
                       {campus.name}
                     </SelectItem>
@@ -385,37 +408,39 @@ export function ScoresManagement({ campuses, codes }: ScoresManagementProps) {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto rounded-md border">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>날짜</TableHead>
-                    <TableHead>캠퍼스명</TableHead>
-                    <TableHead>반명</TableHead>
-                    <TableHead>선생님명</TableHead>
-                    <TableHead>학생명</TableHead>
-                    <TableHead>학년</TableHead>
-                    <TableHead>레벨</TableHead>
-                    <TableHead>학습명</TableHead>
-                    <TableHead>단어목록 진행률(%)</TableHead>
-                    <TableHead>암기학습 진행률(%)</TableHead>
-                    <TableHead>테스트 최고점(점)</TableHead>
+                    <TableHead className="whitespace-nowrap min-w-[7rem]">날짜</TableHead>
+                    <TableHead className="whitespace-nowrap min-w-[8rem]">캠퍼스명</TableHead>
+                    <TableHead className="whitespace-nowrap min-w-[8rem]">반명</TableHead>
+                    <TableHead className="whitespace-nowrap min-w-[7rem]">선생님명</TableHead>
+                    <TableHead className="whitespace-nowrap min-w-[7rem]">학생명</TableHead>
+                    <TableHead className="whitespace-nowrap min-w-[4rem]">학년</TableHead>
+                    <TableHead className="whitespace-nowrap min-w-[4rem]">레벨</TableHead>
+                    <TableHead className="whitespace-nowrap min-w-[12rem]">학습명</TableHead>
+                    <TableHead className="whitespace-nowrap text-right min-w-[8rem]">단어학습(%)</TableHead>
+                    <TableHead className="whitespace-nowrap text-right min-w-[8rem]">플래시카드(%)</TableHead>
+                    <TableHead className="whitespace-nowrap text-right min-w-[8rem]">쓰기학습(%)</TableHead>
+                    <TableHead className="whitespace-nowrap text-right min-w-[8rem]">테스트 최고점</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {scores.map((score, index) => (
                     <TableRow key={index}>
-                      <TableCell>{new Date(score.date).toLocaleDateString("ko-KR")}</TableCell>
-                      <TableCell>{score.campusName}</TableCell>
-                      <TableCell>{score.className}</TableCell>
-                      <TableCell>{score.teacherName}</TableCell>
-                      <TableCell>{score.studentName}</TableCell>
-                      <TableCell>{score.grade}</TableCell>
-                      <TableCell>{score.level}</TableCell>
-                      <TableCell>{score.moduleTitle}</TableCell>
-                      <TableCell>{score.wordProgressPct}%</TableCell>
-                      <TableCell>{score.memorizationProgressPct}%</TableCell>
-                      <TableCell>{score.testBestScorePct !== null ? `${score.testBestScorePct}점` : "-"}</TableCell>
+                      <TableCell className="whitespace-nowrap">{new Date(score.date).toLocaleDateString("ko-KR")}</TableCell>
+                      <TableCell className="whitespace-nowrap">{score.campusName}</TableCell>
+                      <TableCell className="whitespace-nowrap">{score.className}</TableCell>
+                      <TableCell className="whitespace-nowrap">{score.teacherName}</TableCell>
+                      <TableCell className="whitespace-nowrap">{score.studentName}</TableCell>
+                      <TableCell className="whitespace-nowrap">{score.grade}</TableCell>
+                      <TableCell className="whitespace-nowrap">{score.level}</TableCell>
+                      <TableCell className="max-w-[18rem] truncate" title={score.moduleTitle}>{score.moduleTitle}</TableCell>
+                      <TableCell className="whitespace-nowrap text-right tabular-nums">{score.wordLearningProgressPct}%</TableCell>
+                      <TableCell className="whitespace-nowrap text-right tabular-nums">{score.flashcardProgressPct}%</TableCell>
+                      <TableCell className="whitespace-nowrap text-right tabular-nums">{score.writingProgressPct}%</TableCell>
+                      <TableCell className="whitespace-nowrap text-right tabular-nums">{score.testBestScorePct !== null ? `${score.testBestScorePct}점` : "-"}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

@@ -14,6 +14,7 @@ export default async function StatsPage() {
   const thirtyDaysAgo = new Date()
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
 
+  // select만 사용 + 상한 — 불필요한 class·전체 relation 제거로 응답·직렬화 시간 단축
   const completedSessions = await prisma.studySession.findMany({
     where: {
       studentId: session.user.studentId,
@@ -25,14 +26,22 @@ export default async function StatsPage() {
         not: null,
       },
     },
-    include: {
+    select: {
+      id: true,
+      assignmentId: true,
+      moduleId: true,
+      score: true,
+      completedAt: true,
+      updatedAt: true,
+      payloadJson: true,
       assignment: {
-        include: {
-          class: true,
+        select: {
+          assignedDate: true,
         },
       },
       module: {
-        include: {
+        select: {
+          title: true,
           items: {
             orderBy: { order: "asc" },
             select: {
@@ -46,6 +55,7 @@ export default async function StatsPage() {
     orderBy: {
       completedAt: "desc",
     },
+    take: 500,
   })
 
   // 각 학습(assignment + module)별로 최고 점수 세션만 선택

@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth-options"
 import { prisma } from "@/lib/prisma"
 import { CodeCategory } from "@prisma/client"
+import { replaceSemesterLevelMappings } from "@/lib/semester-level-map"
 
 export async function GET() {
   try {
@@ -78,7 +79,7 @@ export async function POST(request: Request) {
       timestamp: new Date().toISOString(),
     })
 
-    const { category, value, order } = body
+    const { category, value, order, levelIds } = body
 
     if (!category || !value) {
       return NextResponse.json(
@@ -95,6 +96,30 @@ export async function POST(request: Request) {
         order: order || 0,
       },
     })
+
+    if (category === "SEMESTER") {
+      const safeLevelIds = Array.isArray(levelIds) ? levelIds.filter((v: unknown) => typeof v === "string") : []
+
+      if (safeLevelIds.length > 0) {
+        const validLevels = await prisma.code.findMany({
+          where: {
+            id: { in: safeLevelIds },
+            category: "LEVEL",
+          },
+          select: { id: true },
+        })
+
+        if (validLevels.length !== new Set(safeLevelIds).size) {
+          await prisma.code.delete({ where: { id: code.id } }).catch(() => null)
+          return NextResponse.json(
+            { error: "학기와 연결할 레벨 코드값이 올바르지 않습니다." },
+            { status: 400 }
+          )
+        }
+      }
+
+      await replaceSemesterLevelMappings(code.id, safeLevelIds)
+    }
 
     console.log("Code created successfully:", { id: code.id, category: code.category, value: code.value })
     return NextResponse.json(code)

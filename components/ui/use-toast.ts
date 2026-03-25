@@ -3,7 +3,8 @@ import * as React from "react"
 import type { ToastActionElement, ToastProps } from "@/components/ui/toast"
 
 const TOAST_LIMIT = 1
-const TOAST_REMOVE_DELAY = 1000000
+/** 닫힌 토스트를 DOM에서 제거하기까지 (너무 길면 닫기 반응이 느리게 느껴질 수 있음) */
+const TOAST_REMOVE_DELAY = 400
 
 type ToasterToast = ToastProps & {
   id: string

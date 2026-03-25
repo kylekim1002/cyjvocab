@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth-options"
+import {
+  fetchBestTestScoresMap,
+  getBestScoreForProgress,
+} from "@/lib/admin-scores-best-test"
 import { prisma } from "@/lib/prisma"
 
 export async function GET(request: Request) {
@@ -145,33 +149,22 @@ export async function GET(request: Request) {
       take: pageSize,
     })
 
-    // 테스트 최고점 조회 (각 progress에 대해)
-    const scoresData = await Promise.all(
-      progressData.map(async (progress) => {
-        const bestScore = await prisma.studySession.findFirst({
-          where: {
-            studentId: progress.studentId,
-            assignmentId: progress.assignmentId,
-            moduleId: progress.moduleId,
-            status: "COMPLETED",
-            score: {
-              not: null,
-            },
-          },
-          orderBy: {
-            score: "desc",
-          },
-          select: {
-            score: true,
-          },
-        })
-
-        return {
-          ...progress,
-          testBestScore: bestScore?.score || null,
-        }
-      })
+    const bestScoreMap = await fetchBestTestScoresMap(
+      progressData.map((p) => ({
+        studentId: p.studentId,
+        assignmentId: p.assignmentId,
+        moduleId: p.moduleId,
+      }))
     )
+
+    const scoresData = progressData.map((progress) => ({
+      ...progress,
+      testBestScore: getBestScoreForProgress(bestScoreMap, {
+        studentId: progress.studentId,
+        assignmentId: progress.assignmentId,
+        moduleId: progress.moduleId,
+      }),
+    }))
 
     // 전체 개수 조회
     const totalCount = await prisma.studentAssignmentProgress.count({ where })
@@ -186,8 +179,10 @@ export async function GET(request: Request) {
       grade: item.student.grade?.value || "-",
       level: item.student.level?.value || "-",
       moduleTitle: item.module.title,
-      wordProgressPct: item.wordlistProgressPct || 0,
-      memorizationProgressPct: item.memorizeProgressPct || 0,
+      wordLearningProgressPct: item.wordlistProgressPct || 0,
+      flashcardProgressPct: item.memorizeProgressPct || 0,
+      // 현재 쓰기학습 진행률은 memorizeProgressPct와 동일한 진행축을 사용합니다.
+      writingProgressPct: item.memorizeProgressPct || 0,
       testBestScorePct: item.testBestScore || null,
     }))
 

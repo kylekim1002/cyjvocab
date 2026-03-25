@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth-options"
+import {
+  fetchBestTestScoresMap,
+  getBestScoreForProgress,
+} from "@/lib/admin-scores-best-test"
 import { prisma } from "@/lib/prisma"
 import * as XLSX from "xlsx"
 
@@ -142,33 +146,22 @@ export async function GET(request: Request) {
       ],
     })
 
-    // 테스트 최고점 조회
-    const scoresData = await Promise.all(
-      progressData.map(async (progress) => {
-        const bestScore = await prisma.studySession.findFirst({
-          where: {
-            studentId: progress.studentId,
-            assignmentId: progress.assignmentId,
-            moduleId: progress.moduleId,
-            status: "COMPLETED",
-            score: {
-              not: null,
-            },
-          },
-          orderBy: {
-            score: "desc",
-          },
-          select: {
-            score: true,
-          },
-        })
-
-        return {
-          ...progress,
-          testBestScore: bestScore?.score || null,
-        }
-      })
+    const bestScoreMap = await fetchBestTestScoresMap(
+      progressData.map((p) => ({
+        studentId: p.studentId,
+        assignmentId: p.assignmentId,
+        moduleId: p.moduleId,
+      }))
     )
+
+    const scoresData = progressData.map((progress) => ({
+      ...progress,
+      testBestScore: getBestScoreForProgress(bestScoreMap, {
+        studentId: progress.studentId,
+        assignmentId: progress.assignmentId,
+        moduleId: progress.moduleId,
+      }),
+    }))
 
     // 엑셀 데이터 포맷팅
     const excelData = scoresData.map((item) => ({
@@ -180,8 +173,9 @@ export async function GET(request: Request) {
       학년: item.student.grade?.value || "-",
       레벨: item.student.level?.value || "-",
       학습명: item.module.title,
-      "단어목록 진행률(%)": item.wordlistProgressPct || 0,
-      "암기학습 진행률(%)": item.memorizeProgressPct || 0,
+      "단어학습 진행률(%)": item.wordlistProgressPct || 0,
+      "플래시카드 진행률(%)": item.memorizeProgressPct || 0,
+      "쓰기학습 진행률(%)": item.memorizeProgressPct || 0,
       "테스트 최고점(점)": item.testBestScore || "-",
     }))
 

@@ -25,8 +25,6 @@ export default function AutoLoginPage() {
 
   const handleAutoLogin = async (token: string) => {
     try {
-      console.log("Auto login attempt with token:", token)
-      
       // 토큰 검증
       const response = await fetch("/api/auth/auto-login", {
         method: "POST",
@@ -37,7 +35,6 @@ export default function AutoLoginPage() {
       })
 
       const data = await response.json()
-      console.log("Auto login API response:", data)
 
       if (!response.ok) {
         setStatus("error")
@@ -51,16 +48,12 @@ export default function AutoLoginPage() {
         return
       }
 
-      console.log("Token verified, attempting signIn...")
-
       // NextAuth 세션 생성 (토큰을 username으로 전달)
       const result = await signIn("credentials", {
         username: token, // 토큰을 username으로 전달
         password: "auto-login-token", // 특별한 값으로 자동로그인 구분
         redirect: false,
       })
-
-      console.log("SignIn result:", result)
 
       if (result?.ok) {
         setStatus("success")

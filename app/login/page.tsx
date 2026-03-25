@@ -21,12 +21,12 @@ export default function LoginPage() {
     setIsLoading(true)
 
     try {
-      console.log("로그인 시도:", { name, username })
+      console.log("학생 로그인 시도:", { name, username })
       const result = await signIn("credentials", {
         username,
-        // 학생 로그인: 비밀번호 없음(서버에서 name+username만 검증)
         password: "",
         name,
+        loginType: "student",
         redirect: false,
       })
 
@@ -34,7 +34,7 @@ export default function LoginPage() {
 
       if (result?.error) {
         console.error("로그인 오류:", result.error)
-        const errorMessage = "이름 또는 전화번호 뒷 4자리가 올바르지 않습니다."
+        const errorMessage = "이름 또는 비밀번호가 올바르지 않습니다."
         
         if (result.error === "CredentialsSignin") {
           toast({
@@ -94,7 +94,7 @@ export default function LoginPage() {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="name">이름</Label>
+              <Label htmlFor="name">아이디</Label>
               <Input
                 id="name"
                 type="text"
@@ -105,22 +105,30 @@ export default function LoginPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="username">전화번호 뒷 4자리</Label>
+              <Label htmlFor="username">비밀번호</Label>
               <Input
                 id="username"
-                type="text"
+                type="password"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 required
                 disabled={isLoading}
                 inputMode="numeric"
-                placeholder="예: 1234"
               />
             </div>
             <Button type="submit" className="w-full" disabled={isLoading}>
               {isLoading ? "로그인 중..." : "로그인"}
             </Button>
           </form>
+          {/* 테두리박스(카드) 하단 중앙 로고 - 기능 변경 없음 */}
+          <div className="flex justify-center mt-6">
+            <img
+              src="/jr-logo.png"
+              alt="정이솜 주니어 영어학습원"
+              className="h-10 w-auto object-contain select-none pointer-events-none"
+              draggable={false}
+            />
+          </div>
         </CardContent>
       </Card>
     </div>

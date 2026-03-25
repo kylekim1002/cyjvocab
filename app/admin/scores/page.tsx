@@ -19,7 +19,11 @@ export default async function ScoresPage() {
     try {
       [campuses, codes] = await Promise.all([
         prisma.campus.findMany({
-    orderBy: { name: "asc" },
+          where:
+            session.user.role === "MANAGER" && session.user.campusId
+              ? { id: session.user.campusId }
+              : undefined,
+          orderBy: { name: "asc" },
         }),
         prisma.code.findMany({
     orderBy: [

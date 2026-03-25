@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth-options"
 import { prisma } from "@/lib/prisma"
+import { z } from "zod"
 
 export async function POST(
   request: Request,
@@ -14,7 +15,26 @@ export async function POST(
   }
 
   try {
-    const { payloadJson } = await request.json()
+    const body = await request.json().catch(() => ({}))
+
+    const payloadJsonSchema = z
+      .object({
+        phase: z.string().optional(),
+        currentIndex: z.coerce.number().int().optional(),
+        quizAnswers: z.record(z.coerce.number()).optional(),
+      })
+      .passthrough()
+
+    const schema = z.object({
+      payloadJson: payloadJsonSchema.optional(),
+    })
+
+    const parsed = schema.safeParse(body)
+    if (!parsed.success) {
+      return NextResponse.json({ error: "잘못된 저장 데이터입니다." }, { status: 400 })
+    }
+
+    const payloadJson = parsed.data.payloadJson
 
     // 세션 확인
     const studySession = await prisma.studySession.findUnique({

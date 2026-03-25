@@ -20,7 +20,6 @@ export default async function CodesPage() {
           { order: "asc" },
         ],
       })
-      console.log("Fetched codes:", codes.length)
     } catch (error) {
       console.error("Error fetching codes:", error)
       // 에러가 발생해도 빈 배열로 계속 진행 (컴포넌트에서 처리)

@@ -7,8 +7,31 @@ import { normalizeWordAudioKey } from "@/lib/word-audio"
 
 type Payload = {
   word_text?: string
+  choice1?: string
+  choice2?: string
+  choice3?: string
+  choice4?: string
+  correct_index?: number | string
   audio_url?: string | null
   [key: string]: unknown
+}
+
+function getMatchKeysFromPayload(p: Payload): string[] {
+  const rawIndex = Number(p.correct_index)
+  if (Number.isNaN(rawIndex)) return []
+
+  const keys: string[] = []
+  // 우선 0-based(현재 저장 규약)로 해석
+  if (rawIndex >= 0 && rawIndex <= 3) {
+    const a0 = p[`choice${rawIndex + 1}`]
+    if (typeof a0 === "string" && a0.trim()) keys.push(a0.trim())
+  }
+  // 과거/외부 데이터 호환: 1-based로 저장된 값도 보조 시도
+  if (rawIndex >= 1 && rawIndex <= 4) {
+    const a1 = p[`choice${rawIndex}`]
+    if (typeof a1 === "string" && a1.trim()) keys.push(a1.trim())
+  }
+  return [...new Set(keys)]
 }
 
 export async function POST(
@@ -36,8 +59,8 @@ export async function POST(
     const keys = new Set<string>()
     for (const item of module.items) {
       const p = item.payloadJson as Payload
-      const w = (p.word_text || "").trim()
-      if (w) keys.add(normalizeWordAudioKey(w))
+      const answerWords = getMatchKeysFromPayload(p)
+      for (const w of answerWords) keys.add(normalizeWordAudioKey(w))
     }
 
     if (keys.size === 0) {
@@ -59,12 +82,12 @@ export async function POST(
 
     for (const item of module.items) {
       const p = item.payloadJson as Payload
-      const w = (p.word_text || "").trim()
-      if (!w) continue
-      const k = normalizeWordAudioKey(w)
-      const url = urlByKey.get(k)
+      const candidateKeys = getMatchKeysFromPayload(p).map((w) => normalizeWordAudioKey(w))
+      if (!candidateKeys.length) continue
+      const k = candidateKeys.find((key) => urlByKey.has(key))
+      const url = k ? urlByKey.get(k) : undefined
       if (!url) {
-        missingKeys.push(k)
+        missingKeys.push(...candidateKeys)
         continue
       }
       linked++

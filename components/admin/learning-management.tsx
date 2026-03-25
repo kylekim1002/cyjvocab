@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
-import { Plus, Edit, Trash2, Upload, Download, Volume2 } from "lucide-react"
+import { Plus, Edit, Trash2, Upload, Download, Volume2, ImageIcon } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
 import * as XLSX from "xlsx"
 import { Switch } from "@/components/ui/switch"
@@ -36,7 +36,9 @@ interface LearningModule {
   level: { id: string; value: string }
   semester: { id: string; value: string } | null
   grade: { id: string; value: string } | null
+  /** 목록은 비어 있고 itemCount만 채워질 수 있음(SSR/API 목록 최적화). 수정 시 단건 GET으로 채움 */
   items: Array<{ id: string; order: number; payloadJson: any }>
+  itemCount?: number
 }
 
 interface Code {
@@ -80,15 +82,38 @@ export function LearningManagement({
   const [editItems, setEditItems] = useState<LearningItem[]>([])
   const [isExcelUpload, setIsExcelUpload] = useState(false)
   const [isLinkingAudioFromPool, setIsLinkingAudioFromPool] = useState(false)
+  const [isLinkingImageFromPool, setIsLinkingImageFromPool] = useState(false)
+  const [deletingModuleIds, setDeletingModuleIds] = useState<Record<string, boolean>>({})
+  const [openingEditId, setOpeningEditId] = useState<string | null>(null)
+
+  const getModuleItemCount = (m: LearningModule) =>
+    m.itemCount ?? m.items?.length ?? 0
 
   const semesterCodes = codes.filter((c) => c.category === "SEMESTER")
   const levelCodes = codes.filter((c) => c.category === "LEVEL")
   const gradeCodes = codes.filter((c) => c.category === "GRADE")
 
+  const normalizePoolKey = (value: string) =>
+    value
+      .trim()
+      .toLowerCase()
+      .replace(/_/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .replace(/\s+/g, "_")
+
+  const getCorrectChoiceText = (item: LearningItem) => {
+    const choices = [item.choice1, item.choice2, item.choice3, item.choice4]
+    const idx = Number(item.correct_index)
+    if (Number.isNaN(idx) || idx < 0 || idx > 3) return ""
+    return String(choices[idx] || "").trim()
+  }
+
   /** 학습 목록 필터: 학기 / 레벨 / 텍스트 검색 */
   const [filterSemesterId, setFilterSemesterId] = useState<string>("all")
   const [filterLevelId, setFilterLevelId] = useState<string>("all")
   const [listSearchQuery, setListSearchQuery] = useState("")
+  const [titleSortOrder, setTitleSortOrder] = useState<"asc" | "desc">("asc")
 
   const filteredModules = useMemo(() => {
     return modules.filter((m) => {
@@ -116,26 +141,75 @@ export function LearningManagement({
     })
   }, [modules, filterSemesterId, filterLevelId, listSearchQuery])
 
+  const sortedFilteredModules = useMemo(() => {
+    return [...filteredModules].sort((a, b) => {
+      const left = (a.title || "").trim()
+      const right = (b.title || "").trim()
+      return titleSortOrder === "asc"
+        ? left.localeCompare(right, "ko")
+        : right.localeCompare(left, "ko")
+    })
+  }, [filteredModules, titleSortOrder])
+
   // 서버에서 최신 데이터 가져오기 (성공하고 데이터가 있을 때만 업데이트)
+  const normalizeModuleListRow = (raw: any): LearningModule => {
+    const itemCount = raw._count?.items ?? raw.items?.length ?? 0
+    const { _count, ...rest } = raw
+    return {
+      ...rest,
+      itemCount,
+      items: Array.isArray(raw.items) ? raw.items : [],
+    }
+  }
+
   const refreshModules = async () => {
     try {
       const response = await fetch("/api/admin/learning-modules")
       if (response.ok) {
         const latestModules = await response.json()
         if (Array.isArray(latestModules) && latestModules.length > 0) {
-          setModules(latestModules)
-          console.log("Refreshed modules:", latestModules.length)
-        } else {
-          console.log("API returned empty array, keeping existing data")
-          // 빈 배열이면 기존 데이터 유지
+          setModules(latestModules.map(normalizeModuleListRow))
         }
       } else {
         console.error("Failed to refresh modules: HTTP", response.status)
-        // 실패해도 기존 데이터 유지
       }
     } catch (error) {
       console.error("Failed to refresh modules:", error)
-      // 에러 발생해도 기존 데이터 유지
+    }
+  }
+
+  const handleDeleteModule = async (module: LearningModule) => {
+    const ok = confirm(
+      `"${module.title}" 학습을 삭제하시겠습니까?\n과제 연결·진행·세션 등 관련 데이터가 함께 삭제됩니다.`
+    )
+    if (!ok) return
+
+    setDeletingModuleIds((prev) => ({ ...prev, [module.id]: true }))
+    try {
+      const res = await fetch(`/api/admin/learning-modules/${module.id}`, {
+        method: "DELETE",
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.error || "삭제 실패")
+      }
+      toast({
+        title: "성공",
+        description: "학습이 삭제되었습니다.",
+      })
+      setModules((prev) => prev.filter((m) => m.id !== module.id))
+      if (editingModule?.id === module.id) {
+        setIsEditDialogOpen(false)
+        setEditingModule(null)
+      }
+    } catch (error: any) {
+      toast({
+        title: "오류",
+        description: error?.message || "학습 삭제에 실패했습니다.",
+        variant: "destructive",
+      })
+    } finally {
+      setDeletingModuleIds((prev) => ({ ...prev, [module.id]: false }))
     }
   }
 
@@ -192,10 +266,8 @@ export function LearningManagement({
   // initialModules가 있으면 우선 사용, 없을 때만 API 호출
   useEffect(() => {
     if (!initialModules || initialModules.length === 0) {
-      console.log("No initial modules, fetching from API")
       refreshModules()
     } else {
-      console.log("Using initial modules:", initialModules.length)
       setModules(initialModules)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -322,14 +394,6 @@ export function LearningManagement({
           })
           return
         }
-        if (!item.image_file && !item.image_url) {
-          toast({
-            title: "오류",
-            description: `문항 ${i + 1}: TYPE_B는 이미지 파일 또는 URL이 필요합니다.`,
-            variant: "destructive",
-          })
-          return
-        }
       }
       // 음원 파일과 URL 동시 입력 체크
       if (item.audio_file && item.audio_url) {
@@ -343,6 +407,34 @@ export function LearningManagement({
     }
 
     try {
+      let audioUrlByKey: Map<string, string> = new Map()
+      const audioPoolRes = await fetch("/api/admin/word-audio")
+      if (audioPoolRes.ok) {
+        const poolRows = await audioPoolRes.json()
+        if (Array.isArray(poolRows)) {
+          audioUrlByKey = new Map(
+            poolRows
+              .filter((r: any) => r?.normalizedKey && r?.publicUrl)
+              .map((r: any) => [String(r.normalizedKey), String(r.publicUrl)])
+          )
+        }
+      }
+
+      let imageUrlByKey: Map<string, string> = new Map()
+      if (formData.type === "TYPE_B") {
+        const poolRes = await fetch("/api/admin/word-image")
+        if (poolRes.ok) {
+          const poolRows = await poolRes.json()
+          if (Array.isArray(poolRows)) {
+            imageUrlByKey = new Map(
+              poolRows
+                .filter((r: any) => r?.normalizedKey && r?.publicUrl)
+                .map((r: any) => [String(r.normalizedKey), String(r.publicUrl)])
+            )
+          }
+        }
+      }
+
       // 이미지/음원 파일이 있는 경우 업로드
       const itemsToSubmit = await Promise.all(
         items.map(async (item) => {
@@ -356,6 +448,10 @@ export function LearningManagement({
               title: "알림",
               description: "이미지 업로드 기능은 준비 중입니다.",
             })
+          } else if (formData.type === "TYPE_B" && !imageUrl) {
+            const key = normalizePoolKey(getCorrectChoiceText(item))
+            const matchedUrl = key ? imageUrlByKey.get(key) : null
+            if (matchedUrl) imageUrl = matchedUrl
           }
           
           if (item.audio_file) {
@@ -380,6 +476,10 @@ export function LearningManagement({
               console.error("Audio upload error:", uploadError)
               throw new Error(`문항 ${items.indexOf(item) + 1}: 음원 업로드 실패 - ${uploadError.message}`)
             }
+          } else if (!audioUrl) {
+            const key = normalizePoolKey(getCorrectChoiceText(item))
+            const matchedAudioUrl = key ? audioUrlByKey.get(key) : null
+            if (matchedAudioUrl) audioUrl = matchedAudioUrl
           }
 
           // correct_index 직접 사용
@@ -399,6 +499,18 @@ export function LearningManagement({
           }
         })
       )
+
+      if (formData.type === "TYPE_B") {
+        const missingRows = itemsToSubmit
+          .map((item, idx) => ({ idx, hasImage: !!item.image_url }))
+          .filter((r) => !r.hasImage)
+          .map((r) => r.idx + 1)
+        if (missingRows.length > 0) {
+          throw new Error(
+            `TYPE_B 이미지가 비어 있는 문항이 있습니다. 이미지 URL을 넣거나 이미지 풀에 정답 보기 단어와 같은 파일명을 먼저 업로드하세요. (문항: ${missingRows.slice(0, 10).join(", ")}${missingRows.length > 10 ? "..." : ""})`
+          )
+        }
+      }
 
       const response = await fetch("/api/admin/learning-modules", {
         method: "POST",
@@ -616,14 +728,7 @@ export function LearningManagement({
           continue
         }
 
-        // TYPE_B 검증: image_url 필요
-        if (effectiveType === "TYPE_B" && !row.image_url) {
-          errors.push({
-            row: rowNum,
-            reason: "TYPE_B는 image_url이 필요합니다.",
-          })
-          continue
-        }
+        // TYPE_B는 image_url이 비어 있어도 허용(생성 시 이미지 풀 자동 매칭 시도)
 
         // 필수 필드 검증
         if (!row.word_text || !row.choice1 || !row.choice2 || !row.choice3 || !row.choice4) {
@@ -701,20 +806,41 @@ export function LearningManagement({
       }
     })
 
-  // 학습 수정 다이얼로그 열기
-  const handleOpenEditDialog = (module: LearningModule) => {
-    setEditingModule(module)
-    setEditFormData({
-      title: module.title,
-      type: module.type,
-      semesterId: module.semester?.id || (semesterCodes[0]?.id ?? ""),
-      levelId: module.level.id,
-      gradeId: module.grade?.id || "",
-      memo: module.memo || "",
-    })
-
-    setEditItems(mapModuleItemsToEditItems(module))
-    setIsEditDialogOpen(true)
+  // 학습 수정 다이얼로그 열기 — 목록은 문항 미포함이므로 단건 GET으로 상세 로드
+  const handleOpenEditDialog = async (module: LearningModule) => {
+    const id = module.id
+    setOpeningEditId(id)
+    try {
+      const res = await fetch(`/api/admin/learning-modules/${id}`)
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        throw new Error(data.error || "학습 정보를 불러오지 못했습니다.")
+      }
+      const full: LearningModule = {
+        ...data,
+        itemCount: data.items?.length ?? 0,
+        items: data.items ?? [],
+      }
+      setEditingModule(full)
+      setEditFormData({
+        title: full.title,
+        type: full.type,
+        semesterId: full.semester?.id || (semesterCodes[0]?.id ?? ""),
+        levelId: full.level.id,
+        gradeId: full.grade?.id || "",
+        memo: full.memo || "",
+      })
+      setEditItems(mapModuleItemsToEditItems(full))
+      setIsEditDialogOpen(true)
+    } catch (e: any) {
+      toast({
+        title: "오류",
+        description: e?.message || "학습 정보를 불러오지 못했습니다.",
+        variant: "destructive",
+      })
+    } finally {
+      setOpeningEditId(null)
+    }
   }
 
   /** DB의 음원 풀(WordAudio)과 문항 word_text를 매칭해 payloadJson.audio_url 설정 */
@@ -737,13 +863,20 @@ export function LearningManagement({
       const oneRes = await fetch(`/api/admin/learning-modules/${editingModule.id}`)
       if (oneRes.ok) {
         const m: LearningModule = await oneRes.json()
-        setEditingModule(m)
-        setEditItems(mapModuleItemsToEditItems(m))
+        const ic = m.items?.length ?? 0
+        const fullForEdit: LearningModule = { ...m, itemCount: ic, items: m.items ?? [] }
+        setEditingModule(fullForEdit)
+        setEditItems(mapModuleItemsToEditItems(fullForEdit))
         setModules((prev) => {
           const idx = prev.findIndex((x) => x.id === m.id)
-          if (idx < 0) return [...prev, m]
+          const listRow: LearningModule = {
+            ...fullForEdit,
+            itemCount: ic,
+            items: [],
+          }
+          if (idx < 0) return [...prev, listRow]
           const next = [...prev]
-          next[idx] = m
+          next[idx] = listRow
           return next
         })
       } else {
@@ -757,6 +890,56 @@ export function LearningManagement({
       })
     } finally {
       setIsLinkingAudioFromPool(false)
+    }
+  }
+
+  /** TYPE_B 전용: DB의 이미지 풀(WordImage)과 문항 word_text를 매칭해 payloadJson.image_url 설정 */
+  const handleLinkImageFromPool = async () => {
+    if (!editingModule || editFormData.type !== "TYPE_B") return
+    setIsLinkingImageFromPool(true)
+    try {
+      const res = await fetch(
+        `/api/admin/learning-modules/${editingModule.id}/link-image-from-pool`,
+        { method: "POST" }
+      )
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || "자동 연결 실패")
+
+      toast({
+        title: "이미지 풀 연결",
+        description: data.message,
+      })
+
+      const oneRes = await fetch(`/api/admin/learning-modules/${editingModule.id}`)
+      if (oneRes.ok) {
+        const m: LearningModule = await oneRes.json()
+        const ic = m.items?.length ?? 0
+        const fullForEdit: LearningModule = { ...m, itemCount: ic, items: m.items ?? [] }
+        setEditingModule(fullForEdit)
+        setEditItems(mapModuleItemsToEditItems(fullForEdit))
+        setModules((prev) => {
+          const idx = prev.findIndex((x) => x.id === m.id)
+          const listRow: LearningModule = {
+            ...fullForEdit,
+            itemCount: ic,
+            items: [],
+          }
+          if (idx < 0) return [...prev, listRow]
+          const next = [...prev]
+          next[idx] = listRow
+          return next
+        })
+      } else {
+        await refreshModules()
+      }
+    } catch (e: any) {
+      toast({
+        title: "오류",
+        description: e?.message || "이미지 자동 연결에 실패했습니다.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLinkingImageFromPool(false)
     }
   }
 
@@ -1256,83 +1439,113 @@ export function LearningManagement({
             </div>
           </div>
           <p className="text-sm text-muted-foreground mb-4">
-            {filteredModules.length}개 표시 (전체 {modules.length}개)
+            {sortedFilteredModules.length}개 표시 (전체 {modules.length}개)
           </p>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>제목</TableHead>
-                <TableHead>타입</TableHead>
-                <TableHead>학기</TableHead>
-                <TableHead>레벨</TableHead>
-                <TableHead>학년</TableHead>
-                <TableHead>문항 수</TableHead>
-                <TableHead>생성일</TableHead>
-                <TableHead>상태</TableHead>
-                <TableHead>작업</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredModules.length === 0 ? (
+          {/* 학생 관리와 동일: 한 줄 정렬·줄바꿈 방지, 좁은 화면은 가로 스크롤 */}
+          <div className="overflow-x-auto rounded-md border bg-background">
+            <Table className="w-max min-w-full text-xs [&_th]:whitespace-nowrap [&_th]:px-2 [&_th]:py-2 [&_td]:px-2 [&_td]:py-2">
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
-                    조건에 맞는 학습이 없습니다.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                filteredModules.map((module) => (
-                <TableRow key={module.id}>
-                  <TableCell>{module.title}</TableCell>
-                  <TableCell>
-                    {module.type === "TYPE_A" ? "단어+뜻" : "그림+단어+뜻"}
-                  </TableCell>
-                  <TableCell>{module.semester?.value || "-"}</TableCell>
-                  <TableCell>{module.level.value}</TableCell>
-                  <TableCell>{module.grade?.value || "-"}</TableCell>
-                  <TableCell>{module.items.length}</TableCell>
-                  <TableCell>
-                    {new Date((module as any).createdAt).toLocaleDateString("ko-KR")}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-3">
-                      <span
-                        className={`text-xs font-medium ${
-                          module.status === "INACTIVE" ? "text-gray-900" : "text-gray-400"
-                        }`}
-                      >
-                        OFF
-                      </span>
-                      <Switch
-                        checked={module.status === "ACTIVE"}
-                        disabled={!!isTogglingStatus[module.id]}
-                        onCheckedChange={(checked) => {
-                          handleToggleModuleStatus(module, checked ? "ACTIVE" : "INACTIVE")
-                        }}
-                      />
-                      <span
-                        className={`text-xs font-medium ${
-                          module.status === "ACTIVE" ? "text-green-700" : "text-gray-400"
-                        }`}
-                      >
-                        ON
-                      </span>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleOpenEditDialog(module)}
+                  <TableHead className="min-w-[10rem] max-w-[18rem]">
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1"
+                      onClick={() => setTitleSortOrder((prev) => (prev === "asc" ? "desc" : "asc"))}
+                      title={`제목 ${titleSortOrder === "asc" ? "오름차순" : "내림차순"} 정렬`}
                     >
-                      <Edit className="h-3 w-3 mr-1" />
-                      수정
-                    </Button>
-                  </TableCell>
+                      제목 {titleSortOrder === "asc" ? "▲" : "▼"}
+                    </button>
+                  </TableHead>
+                  <TableHead>타입</TableHead>
+                  <TableHead>학기</TableHead>
+                  <TableHead>레벨</TableHead>
+                  <TableHead>학년</TableHead>
+                  <TableHead>문항 수</TableHead>
+                  <TableHead>생성일</TableHead>
+                  <TableHead>상태</TableHead>
+                  <TableHead>작업</TableHead>
                 </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {sortedFilteredModules.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
+                      조건에 맞는 학습이 없습니다.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  sortedFilteredModules.map((module) => (
+                    <TableRow key={module.id}>
+                      <TableCell
+                        className="max-w-[18rem] truncate align-middle font-medium"
+                        title={module.title}
+                      >
+                        {module.title}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap">
+                        {module.type === "TYPE_A" ? "단어+뜻" : "그림+단어+뜻"}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap">{module.semester?.value || "-"}</TableCell>
+                      <TableCell className="whitespace-nowrap">{module.level.value}</TableCell>
+                      <TableCell className="whitespace-nowrap">{module.grade?.value || "-"}</TableCell>
+                      <TableCell className="whitespace-nowrap tabular-nums">
+                        {getModuleItemCount(module)}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap tabular-nums">
+                        {new Date((module as any).createdAt).toLocaleDateString("ko-KR")}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap">
+                        <div className="flex items-center gap-3">
+                          <span
+                            className={`text-xs font-medium ${
+                              module.status === "INACTIVE" ? "text-gray-900" : "text-gray-400"
+                            }`}
+                          >
+                            OFF
+                          </span>
+                          <Switch
+                            checked={module.status === "ACTIVE"}
+                            disabled={!!isTogglingStatus[module.id]}
+                            onCheckedChange={(checked) => {
+                              handleToggleModuleStatus(module, checked ? "ACTIVE" : "INACTIVE")
+                            }}
+                          />
+                          <span
+                            className={`text-xs font-medium ${
+                              module.status === "ACTIVE" ? "text-green-700" : "text-gray-400"
+                            }`}
+                          >
+                            ON
+                          </span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => void handleOpenEditDialog(module)}
+                          disabled={openingEditId === module.id}
+                          title="수정"
+                        >
+                          <Edit className="h-3 w-3" />
+                        </Button>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          className="ml-2"
+                          title="삭제"
+                          onClick={() => void handleDeleteModule(module)}
+                          disabled={!!deletingModuleIds[module.id]}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
         </CardContent>
       </Card>
 
@@ -1443,17 +1656,32 @@ export function LearningManagement({
                   <div className="flex flex-wrap justify-between items-center gap-2 mb-4">
                     <Label>문항 편집</Label>
                     <div className="flex flex-wrap gap-2">
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        size="sm"
-                        disabled={isLinkingAudioFromPool}
-                        onClick={handleLinkAudioFromPool}
-                        title="음원 관리에 업로드한 풀과 단어를 매칭합니다"
-                      >
-                        <Volume2 className="h-4 w-4 mr-2" />
-                        {isLinkingAudioFromPool ? "연결 중…" : "음원 풀에서 자동 연결"}
-                      </Button>
+                      {(editFormData.type === "TYPE_A" || editFormData.type === "TYPE_B") && (
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          disabled={isLinkingAudioFromPool || isLinkingImageFromPool}
+                          onClick={handleLinkAudioFromPool}
+                          title="음원 관리에 업로드한 풀과 단어를 매칭합니다"
+                        >
+                          <Volume2 className="h-4 w-4 mr-2" />
+                          {isLinkingAudioFromPool ? "연결 중…" : "음원 풀에서 자동 연결"}
+                        </Button>
+                      )}
+                      {editFormData.type === "TYPE_B" && (
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          disabled={isLinkingAudioFromPool || isLinkingImageFromPool}
+                          onClick={handleLinkImageFromPool}
+                          title="이미지 관리에 업로드한 풀과 단어를 매칭합니다 (TYPE_B)"
+                        >
+                          <ImageIcon className="h-4 w-4 mr-2" />
+                          {isLinkingImageFromPool ? "연결 중…" : "이미지 풀에서 자동 연결"}
+                        </Button>
+                      )}
                       <Button
                         type="button"
                         variant="outline"

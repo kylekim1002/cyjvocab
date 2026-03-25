@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth-options"
 import { prisma } from "@/lib/prisma"
+import { z } from "zod"
 
 export async function GET(request: Request) {
   const session = await getServerSession(authOptions)
@@ -16,21 +17,30 @@ export async function GET(request: Request) {
     const levelId = searchParams.get("levelId")
     const q = (searchParams.get("q") || "").trim()
 
-    if (!semesterId || !levelId) {
-      return NextResponse.json(
-        { error: "semesterId와 levelId가 필요합니다." },
-        { status: 400 }
-      )
+    const schema = z.object({
+      semesterId: z.string().min(1),
+      levelId: z.string().min(1),
+      q: z.string().max(80).optional(),
+    })
+
+    const parsed = schema.safeParse({
+      semesterId: semesterId ?? "",
+      levelId: levelId ?? "",
+      q: q || undefined,
+    })
+
+    if (!parsed.success) {
+      return NextResponse.json({ error: "semesterId와 levelId가 필요합니다." }, { status: 400 })
     }
 
     const where: any = {
-      semesterId,
-      levelId,
+      semesterId: parsed.data.semesterId,
+      levelId: parsed.data.levelId,
       status: "ACTIVE",
     }
 
-    if (q) {
-      where.title = { contains: q, mode: "insensitive" }
+    if (parsed.data.q) {
+      where.title = { contains: parsed.data.q, mode: "insensitive" }
     }
 
     const modules = await prisma.learningModule.findMany({
@@ -40,7 +50,8 @@ export async function GET(request: Request) {
         title: true,
         type: true,
       },
-      orderBy: { createdAt: "desc" },
+      // 검색 결과는 모듈 제목 오름차순으로 정렬
+      orderBy: { title: "asc" },
       take: 20,
     })
 

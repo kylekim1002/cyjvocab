@@ -24,15 +24,14 @@ export async function GET(request: Request) {
       where.semesterId = semesterId
     }
 
+    // 목록: 문항 payload 전체 로드 대신 개수만 — 목록·필터 응답 크기·DB 부담 감소 (수정 시 단건 GET)
     const modules = await prisma.learningModule.findMany({
       where,
       include: {
         level: true,
         semester: true,
         grade: true,
-        items: {
-          orderBy: { order: "asc" },
-        },
+        _count: { select: { items: true } },
       },
       orderBy: { createdAt: "desc" },
     })

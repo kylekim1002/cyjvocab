@@ -229,3 +229,30 @@ export async function PATCH(
     )
   }
 }
+
+export async function DELETE(
+  _request: Request,
+  { params }: { params: { id: string } }
+) {
+  const session = await getServerSession(authOptions)
+
+  if (!session || (session.user.role !== "SUPER_ADMIN" && session.user.role !== "MANAGER")) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
+
+  try {
+    await prisma.learningModule.delete({
+      where: { id: params.id },
+    })
+    return NextResponse.json({ ok: true })
+  } catch (error: any) {
+    console.error("Delete learning module error:", error)
+    if (error.code === "P2025") {
+      return NextResponse.json({ error: "학습을 찾을 수 없습니다." }, { status: 404 })
+    }
+    return NextResponse.json(
+      { error: error.message || "학습 삭제에 실패했습니다." },
+      { status: 500 }
+    )
+  }
+}

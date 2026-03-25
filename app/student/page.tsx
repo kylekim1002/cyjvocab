@@ -3,57 +3,60 @@ import { authOptions } from "@/lib/auth-options"
 import { prisma } from "@/lib/prisma"
 import { StudentHomeContent } from "@/components/student/home-content"
 import { Card, CardContent } from "@/components/ui/card"
+import { getSemesterLevelMapRows, groupSemesterLevelMappings } from "@/lib/semester-level-map"
+import { getSemesterStatusRows, toSemesterStatusMap } from "@/lib/semester-status"
 
 export default async function StudentHomePage() {
-  const session = await getServerSession(authOptions)
+  try {
+    const session = await getServerSession(authOptions)
 
-  if (!session?.user?.studentId) {
-    return null
-  }
+    if (!session?.user?.studentId) {
+      return null
+    }
 
-  // 학생 정보 및 현재 배정 클래스 확인
-  const student = await prisma.student.findUnique({
-    where: { id: session.user.studentId },
-    select: {
-      status: true,
-      studentClasses: {
-        where: {
-          endAt: null, // 현재 배정된 클래스만
+    // 학생 정보 및 현재 배정 클래스 확인
+    const student = await prisma.student.findUnique({
+      where: { id: session.user.studentId },
+      select: {
+        status: true,
+        studentClasses: {
+          where: {
+            endAt: null, // 현재 배정된 클래스만
+          },
+          select: { classId: true },
         },
-        select: { classId: true },
       },
-    },
-  })
+    })
 
-  if (!student || student.status !== "ACTIVE") {
-    return (
-      <div className="container mx-auto p-4">
-        <Card>
-          <CardContent className="py-8 text-center text-muted-foreground">
-            활성 상태가 아니거나 클래스에 배정되지 않았습니다. 캠퍼스로 문의하세요.
-          </CardContent>
-        </Card>
-      </div>
-    )
-  }
+    if (!student || student.status !== "ACTIVE") {
+      return (
+        <div className="container mx-auto p-4">
+          <Card>
+            <CardContent className="py-8 text-center text-muted-foreground">
+              활성 상태가 아니거나 클래스에 배정되지 않았습니다. 캠퍼스로 문의하세요.
+            </CardContent>
+          </Card>
+        </div>
+      )
+    }
 
-  if (student.studentClasses.length === 0) {
-    return (
-      <div className="container mx-auto p-4">
-        <Card>
-          <CardContent className="py-8 text-center text-muted-foreground">
-            현재 배정된 클래스가 없습니다. 캠퍼스로 문의하세요.
-          </CardContent>
-        </Card>
-      </div>
-    )
-  }
+    if (student.studentClasses.length === 0) {
+      return (
+        <div className="container mx-auto p-4">
+          <Card>
+            <CardContent className="py-8 text-center text-muted-foreground">
+              현재 배정된 클래스가 없습니다. 캠퍼스로 문의하세요.
+            </CardContent>
+          </Card>
+        </div>
+      )
+    }
 
-  // 현재 배정된 클래스 ID 목록
-  const currentClassIds = student.studentClasses.map((sc) => sc.classId)
+    // 현재 배정된 클래스 ID 목록
+    const currentClassIds = student.studentClasses.map((sc) => sc.classId)
 
-  // 코드값 + 배정 목록을 한 번에 병렬 조회 (홈 로딩 지연 단축)
-  const [semesterCodes, levelCodes, allAssignments] = await Promise.all([
+    // 코드값 + 배정 목록을 한 번에 병렬 조회 (홈 로딩 지연 단축)
+    const [semesterCodes, levelCodes, allAssignments, semesterLevelRows, semesterStatusRows] = await Promise.all([
     prisma.code.findMany({
       where: { category: "SEMESTER" },
       orderBy: { order: "asc" },
@@ -75,6 +78,7 @@ export default async function StudentHomePage() {
         modules: {
           select: {
             id: true,
+            assignmentId: true,
             moduleId: true,
             order: true,
             source: true,
@@ -105,13 +109,15 @@ export default async function StudentHomePage() {
         assignedDate: "asc",
       },
     }),
+    getSemesterLevelMapRows().catch(() => []),
+    getSemesterStatusRows().catch(() => []),
   ])
 
-  // 같은 날짜 + 같은 클래스의 assignment를 하나로 합치기 (중복 방지)
-  // progress가 있는 assignment를 우선적으로 사용하여 기존 학습 데이터 보존
-  const assignmentMap = new Map<string, typeof allAssignments[0]>()
+    // 같은 날짜 + 같은 클래스의 assignment를 하나로 합치기 (중복 방지)
+    // progress가 있는 assignment를 우선적으로 사용하여 기존 학습 데이터 보존
+    const assignmentMap = new Map<string, typeof allAssignments[0]>()
   
-  allAssignments.forEach((assignment) => {
+    allAssignments.forEach((assignment) => {
     // 날짜와 클래스 ID를 키로 사용
     const dateKey = `${assignment.classId}_${assignment.assignedDate.toISOString().split('T')[0]}`
     const existing = assignmentMap.get(dateKey)
@@ -153,21 +159,36 @@ export default async function StudentHomePage() {
         }
       }
     }
-  })
+    })
 
-  const assignments = Array.from(assignmentMap.values())
+    const assignments = Array.from(assignmentMap.values())
 
-  // 학기·레벨 드롭다운은 코드 전체를 보여 검색·탐색이 가능하게 함.
-  // 실제 배정은 POST /api/student/calendar/assignments/add 에서
-  // 선택 레벨과 일치하는 학생 클래스가 있는지 검증함.
-  const filteredSemesterCodes = semesterCodes.map((c) => ({ id: c.id, value: c.value }))
-  const filteredLevelCodesNormalized = levelCodes.map((c) => ({ id: c.id, value: c.value }))
+    // 학기 상태 OFF는 학생 화면에서 노출하지 않음
+    const semesterStatusMap = toSemesterStatusMap(semesterStatusRows)
+    const activeSemesterCodes = semesterCodes.filter((c) => semesterStatusMap[c.id] ?? true)
+    // 학기별 레벨 매핑이 있으면 해당 레벨만 노출, 없으면 기존처럼 전체 레벨 허용(하위 호환)
+    const filteredSemesterCodes = activeSemesterCodes.map((c) => ({ id: c.id, value: c.value }))
+    const filteredLevelCodesNormalized = levelCodes.map((c) => ({ id: c.id, value: c.value }))
+    const semesterLevelMapBySemester = groupSemesterLevelMappings(semesterLevelRows)
 
-  return (
-    <StudentHomeContent
-      assignments={assignments}
-      semesterCodes={filteredSemesterCodes}
-      levelCodes={filteredLevelCodesNormalized}
-    />
-  )
+    return (
+      <StudentHomeContent
+        assignments={assignments}
+        semesterCodes={filteredSemesterCodes}
+        levelCodes={filteredLevelCodesNormalized}
+        semesterLevelMapBySemester={semesterLevelMapBySemester}
+      />
+    )
+  } catch (error) {
+    console.error("Student home page error:", error)
+    return (
+      <div className="container mx-auto p-4">
+        <Card>
+          <CardContent className="py-8 text-center text-muted-foreground">
+            학생 홈 데이터를 불러오는 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
 }

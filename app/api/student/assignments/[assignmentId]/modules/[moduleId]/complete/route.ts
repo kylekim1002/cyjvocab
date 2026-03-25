@@ -2,6 +2,8 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth-options"
 import { prisma } from "@/lib/prisma"
+import { devLog } from "@/lib/safe-log"
+import { z } from "zod"
 
 export async function POST(
   request: Request,
@@ -16,12 +18,24 @@ export async function POST(
   try {
     // 요청 본문에서 quizAnswers, currentIndex, isReview 가져오기
     const body = await request.json().catch(() => ({}))
-    const { quizAnswers: requestQuizAnswers, currentIndex: requestCurrentIndex, isReview, phase: requestPhase } = body
 
-    console.log("Complete API called", {
-      studentId: session.user.studentId,
-      assignmentId: params.assignmentId,
-      moduleId: params.moduleId,
+    const schema = z
+      .object({
+        quizAnswers: z.record(z.coerce.number()).optional(),
+        currentIndex: z.coerce.number().int().min(-1).optional(),
+        isReview: z.boolean().optional(),
+        phase: z.string().max(30).optional(),
+      })
+      .passthrough()
+
+    const parsed = schema.safeParse(body)
+    if (!parsed.success) {
+      return NextResponse.json({ error: "잘못된 요청 데이터입니다." }, { status: 400 })
+    }
+
+    const { quizAnswers: requestQuizAnswers, currentIndex: requestCurrentIndex, isReview, phase: requestPhase } = parsed.data
+
+    devLog("Complete API called", {
       hasQuizAnswers: !!requestQuizAnswers,
     })
 
@@ -50,7 +64,7 @@ export async function POST(
 
     // 세션이 없으면 새로 생성 (학습을 완료한 경우)
     if (!studySession) {
-      console.log("No session found, creating new session for completion")
+      devLog("No session found, creating new session for completion")
       studySession = await prisma.studySession.create({
         data: {
           studentId: session.user.studentId,
@@ -63,9 +77,9 @@ export async function POST(
           },
         },
       })
-      console.log("Created new session for completion:", studySession.id)
+      devLog("Created new session for completion")
     } else {
-      console.log("Found session:", studySession.id, studySession.status)
+      devLog("Found session for completion")
       // 기존 세션의 payloadJson 업데이트 (요청에서 온 데이터로)
       // 중요: phase와 finalTestItems는 절대 덮어쓰지 않음 (최종테스트 데이터 보존)
       if (requestQuizAnswers !== undefined || requestCurrentIndex !== undefined || requestPhase !== undefined) {
@@ -85,12 +99,18 @@ export async function POST(
       }
     }
 
-    // 모듈 정보 조회
+    // 모듈 정보 조회 (점수 계산에 필요한 type·문항 payload만 — 전체 LearningItem 로드 최소화)
     const module = await prisma.learningModule.findUnique({
       where: { id: params.moduleId },
-      include: {
+      select: {
+        id: true,
+        type: true,
         items: {
-          orderBy: { order: "asc" }, // order로 정렬 보장
+          orderBy: { order: "asc" },
+          select: {
+            order: true,
+            payloadJson: true,
+          },
         },
       },
     })
@@ -126,20 +146,11 @@ export async function POST(
       // items를 order로 정렬 (이중 보장)
       const sortedItems = [...module.items].sort((a, b) => a.order - b.order)
 
-      console.log("=== 점수 계산 시작 ===")
-      console.log("정규화된 quizAnswers:", normalizedQuizAnswers)
-      console.log("정규화된 quizAnswers 키:", Object.keys(normalizedQuizAnswers).map(k => ({ key: k, type: typeof k, value: normalizedQuizAnswers[Number(k)] })))
-      console.log("모듈 items 개수:", sortedItems.length)
-      console.log("정렬된 items 순서:", sortedItems.map((item, idx) => ({ 
-        arrayIndex: idx, 
-        order: item.order, 
-        word: (item.payloadJson as any)?.word_text,
-        correctIndex: (item.payloadJson as any)?.correct_index 
-      })))
+      devLog("=== 점수 계산 시작 ===", { itemCount: sortedItems.length })
 
       sortedItems.forEach((item, arrayIndex) => {
         if (!item.payloadJson) {
-          console.log(`Item ${arrayIndex}: payloadJson 없음`)
+          devLog(`Item ${arrayIndex}: payloadJson 없음`)
           return
         }
         
@@ -149,33 +160,13 @@ export async function POST(
         
         // undefined 체크
         if (studentAnswer === undefined || isNaN(studentAnswer)) {
-          console.log(`Item ${arrayIndex} (order: ${item.order}, word: ${itemPayload.word_text}): 답안 없음`, {
-            arrayIndex,
-            order: item.order,
-            correctIndex,
-            studentAnswer: undefined,
-            match: false,
-          })
+          devLog(`Item ${arrayIndex}: 답안 없음`)
           return
         }
         
         const isCorrect = studentAnswer === correctIndex
         
-        // 상세 디버깅 로그
-        console.log(`Item ${arrayIndex} (order: ${item.order}):`, {
-          wordText: itemPayload.word_text,
-          correctIndex,
-          correctIndexType: typeof correctIndex,
-          studentAnswer,
-          studentAnswerType: typeof studentAnswer,
-          match: isCorrect,
-          choices: {
-            0: itemPayload.choice1,
-            1: itemPayload.choice2,
-            2: itemPayload.choice3,
-            3: itemPayload.choice4,
-          },
-        })
+        devLog(`Item ${arrayIndex} match`, { isCorrect })
         
         if (isCorrect) {
           correctCount++
@@ -183,20 +174,31 @@ export async function POST(
       })
 
       score = Math.round((correctCount / sortedItems.length) * 100)
-      console.log("=== 점수 계산 완료 ===")
-      console.log("정답 개수:", correctCount, "/", sortedItems.length)
-      console.log("최종 점수:", score)
+      devLog("=== 점수 계산 완료 ===", { correctCount, total: sortedItems.length, score })
     }
 
     // 세션 완료 처리
-    await prisma.studySession.update({
-      where: { id: studySession.id },
+    const completedAt = new Date()
+    const completionUpdated = await prisma.studySession.updateMany({
+      where: { id: studySession.id, status: "IN_PROGRESS" },
       data: {
         status: "COMPLETED",
         score,
-        completedAt: new Date(),
+        completedAt,
       },
     })
+
+    // 동시 요청으로 이미 완료된 경우: 진행도/로그 중복 기록 방지
+    if (completionUpdated.count === 0) {
+      const already = await prisma.studySession.findUnique({
+        where: { id: studySession.id },
+        select: { score: true },
+      })
+      return NextResponse.json({
+        success: true,
+        score: already?.score ?? score,
+      })
+    }
 
     // 진행도 완료 처리 (복습 모드가 아닐 때만)
     if (!isReview) {
@@ -214,12 +216,12 @@ export async function POST(
           moduleId: params.moduleId,
           progressPct: 100,
           completed: true,
-          completedAt: new Date(),
+          completedAt,
         },
         update: {
           progressPct: 100,
           completed: true,
-          completedAt: new Date(),
+          completedAt,
         },
       })
     }

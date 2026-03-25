@@ -10,27 +10,35 @@ export async function PATCH(
 ) {
   const session = await getServerSession(authOptions)
 
-  // SUPER_ADMIN만 자신의 비밀번호를 변경할 수 있도록 허용 (인증 없이도 가능하도록)
-  // 또는 인증된 사용자가 자신의 비밀번호를 변경할 수 있도록
-  if (!session) {
-    // 인증 없이도 cyjkyle 사용자의 비밀번호를 업데이트할 수 있도록 허용 (초기 설정용)
-    if (params.username !== "cyjkyle") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
+  // 운영 환경 보안 강화를 위해 인증 + SUPER_ADMIN 권한을 필수로 강제
+  if (!session?.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
+
+  if (session.user.role !== "SUPER_ADMIN") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
 
   try {
+    const targetUsername = params.username?.trim()
     const { password } = await request.json()
 
-    if (!password || !password.trim()) {
+    if (!targetUsername) {
       return NextResponse.json(
-        { error: "비밀번호는 필수입니다." },
+        { error: "유효한 사용자명이 필요합니다." },
+        { status: 400 }
+      )
+    }
+
+    if (!password || !password.trim() || password.trim().length < 8) {
+      return NextResponse.json(
+        { error: "비밀번호는 8자 이상이어야 합니다." },
         { status: 400 }
       )
     }
 
     const user = await prisma.user.findUnique({
-      where: { username: params.username },
+      where: { username: targetUsername },
     })
 
     if (!user) {
@@ -43,14 +51,14 @@ export async function PATCH(
     const hashedPassword = await bcrypt.hash(password.trim(), 10)
 
     await prisma.user.update({
-      where: { username: params.username },
+      where: { username: targetUsername },
       data: {
         password: hashedPassword,
         isActive: true, // 비밀번호 업데이트 시 활성 상태 보장
       },
     })
 
-    console.log(`Password updated for user: ${params.username}`)
+    console.log(`Password updated by SUPER_ADMIN for user: ${targetUsername}`)
 
     return NextResponse.json({ success: true })
   } catch (error: any) {

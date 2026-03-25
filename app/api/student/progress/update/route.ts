@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth-options"
 import { prisma } from "@/lib/prisma"
+import { z } from "zod"
 
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions)
@@ -11,21 +12,25 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { assignmentId, moduleId, mode, currentIndex, totalCount } = await request.json()
+    const body = await request.json().catch(() => ({}))
 
-    if (!assignmentId || !moduleId || !mode || currentIndex === undefined || !totalCount) {
+    const schema = z.object({
+      assignmentId: z.string().min(1),
+      moduleId: z.string().min(1),
+      mode: z.enum(["WORDLIST", "MEMORIZE"]),
+      currentIndex: z.coerce.number().int().nonnegative(),
+      totalCount: z.coerce.number().int().positive(),
+    })
+
+    const parsed = schema.safeParse(body)
+    if (!parsed.success) {
       return NextResponse.json(
-        { error: "필수 파라미터가 누락되었습니다." },
+        { error: "필수 파라미터가 누락되었거나 잘못되었습니다." },
         { status: 400 }
       )
     }
 
-    if (mode !== "WORDLIST" && mode !== "MEMORIZE") {
-      return NextResponse.json(
-        { error: "잘못된 모드입니다." },
-        { status: 400 }
-      )
-    }
+    const { assignmentId, moduleId, mode, currentIndex, totalCount } = parsed.data
 
     const studentId = session.user.studentId
 
@@ -34,6 +39,7 @@ export async function POST(request: Request) {
     const progressPct = Math.floor(((maxIndex + 1) / totalCount) * 100)
 
     // 기존 진행률 조회 또는 생성
+    // 핫패스(대부분 existing=true)에서는 1회 조회 + 1회 업데이트만 수행.
     const existingProgress = await prisma.studentAssignmentProgress.findUnique({
       where: {
         studentId_assignmentId_moduleId: {
@@ -42,22 +48,12 @@ export async function POST(request: Request) {
           moduleId,
         },
       },
+      select: {
+        id: true,
+        wordlistMaxIndex: true,
+        memorizeMaxIndex: true,
+      },
     })
-
-    // 첫 생성 시에만 배정 존재 여부 확인 (이미 progress 행이 있으면 DB 1회 절약)
-    if (!existingProgress) {
-      const assignment = await prisma.classAssignment.findUnique({
-        where: { id: assignmentId },
-        select: { id: true },
-      })
-
-      if (!assignment) {
-        return NextResponse.json(
-          { error: "배정을 찾을 수 없습니다." },
-          { status: 404 }
-        )
-      }
-    }
 
     let updatedProgress
 
@@ -117,9 +113,20 @@ export async function POST(request: Request) {
         data.memorizeProgressPct = progressPct
       }
 
-      updatedProgress = await prisma.studentAssignmentProgress.create({
-        data,
-      })
+      try {
+        updatedProgress = await prisma.studentAssignmentProgress.create({
+          data,
+        })
+      } catch (error: any) {
+        // 생성 시 FK 제약에 걸리는 경우(예: assignment 삭제)만 404로 매핑
+        if (error?.code === "P2003") {
+          return NextResponse.json(
+            { error: "배정을 찾을 수 없습니다." },
+            { status: 404 }
+          )
+        }
+        throw error
+      }
     }
 
     return NextResponse.json({

@@ -4,6 +4,9 @@ import { authOptions } from "@/lib/auth-options"
 import { AdminSidebar } from "@/components/admin/sidebar"
 import { AdminTopbar } from "@/components/admin/admin-topbar"
 
+/** getServerSession → headers() 사용. 정적 생성 시도 시 빌드 로그에 Dynamic server usage가 반복되는 것을 방지 */
+export const dynamic = "force-dynamic"
+
 export default async function AdminLayout({
   children,
 }: {

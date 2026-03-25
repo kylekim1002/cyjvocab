@@ -67,10 +67,27 @@ const config = {
           from: { height: "var(--radix-accordion-content-height)" },
           to: { height: "0" },
         },
+        /** 쓰기학습: 오답 시 (GPU 친화 transform만) */
+        "writing-wrong-shake": {
+          "0%, 100%": { transform: "translateX(0) rotate(0deg)" },
+          "15%": { transform: "translateX(-6px) rotate(-5deg)" },
+          "30%": { transform: "translateX(6px) rotate(5deg)" },
+          "45%": { transform: "translateX(-4px) rotate(-3deg)" },
+          "60%": { transform: "translateX(4px) rotate(3deg)" },
+          "75%": { transform: "translateX(-2px) rotate(-1deg)" },
+        },
+        /** 쓰기학습: 새 문항 진입 시 짧은 팝 */
+        "writing-happy-pop": {
+          "0%": { transform: "scale(0.92)" },
+          "55%": { transform: "scale(1.08)" },
+          "100%": { transform: "scale(1)" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
+        "writing-wrong-shake": "writing-wrong-shake 0.52s ease-in-out both",
+        "writing-happy-pop": "writing-happy-pop 0.45s ease-out both",
       },
     },
   },

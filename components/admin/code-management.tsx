@@ -4,11 +4,13 @@ import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Switch } from "@/components/ui/switch"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Plus, Minus, Edit } from "lucide-react"
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { useToast } from "@/components/ui/use-toast"
 import { CodeCategory } from "@prisma/client"
 
@@ -32,7 +34,33 @@ export function CodeManagement({ initialCodes }: CodeManagementProps) {
   const [editingCode, setEditingCode] = useState<Code | null>(null)
   const [editValue, setEditValue] = useState("")
   const [editOrder, setEditOrder] = useState(0)
+  const [newSemesterLevelIds, setNewSemesterLevelIds] = useState<string[]>([])
+  const [editSemesterLevelIds, setEditSemesterLevelIds] = useState<string[]>([])
+  const [semesterLevelMapBySemester, setSemesterLevelMapBySemester] = useState<Record<string, string[]>>({})
+  const [semesterActiveMap, setSemesterActiveMap] = useState<Record<string, boolean>>({})
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+
+  const refreshSemesterLevelMaps = async () => {
+    try {
+      const response = await fetch("/api/admin/semester-level-maps")
+      if (!response.ok) return
+      const data = await response.json()
+      setSemesterLevelMapBySemester(data?.bySemester || {})
+    } catch {
+      setSemesterLevelMapBySemester({})
+    }
+  }
+
+  const refreshSemesterStatus = async () => {
+    try {
+      const response = await fetch("/api/admin/semester-status")
+      if (!response.ok) return
+      const data = await response.json()
+      setSemesterActiveMap(data?.bySemester || {})
+    } catch {
+      setSemesterActiveMap({})
+    }
+  }
 
   // 서버에서 최신 데이터 가져오기 (성공하고 데이터가 있을 때만 업데이트)
   const refreshCodes = async () => {
@@ -66,6 +94,8 @@ export function CodeManagement({ initialCodes }: CodeManagementProps) {
       console.log("Using initial codes:", initialCodes.length)
       setCodes(initialCodes)
     }
+    refreshSemesterLevelMaps()
+    refreshSemesterStatus()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -73,6 +103,11 @@ export function CodeManagement({ initialCodes }: CodeManagementProps) {
     setEditingCode(code)
     setEditValue(code.value)
     setEditOrder(code.order)
+    if (code.category === "SEMESTER") {
+      setEditSemesterLevelIds(semesterLevelMapBySemester[code.id] || [])
+    } else {
+      setEditSemesterLevelIds([])
+    }
     setIsEditDialogOpen(true)
   }
 
@@ -93,6 +128,7 @@ export function CodeManagement({ initialCodes }: CodeManagementProps) {
         body: JSON.stringify({
           value: editValue,
           order: editOrder,
+          ...(editingCode.category === "SEMESTER" && { levelIds: editSemesterLevelIds }),
         }),
       })
 
@@ -101,6 +137,8 @@ export function CodeManagement({ initialCodes }: CodeManagementProps) {
       }
 
       await refreshCodes()
+      await refreshSemesterLevelMaps()
+      await refreshSemesterStatus()
       setIsEditDialogOpen(false)
       setEditingCode(null)
       toast({
@@ -126,6 +164,15 @@ export function CodeManagement({ initialCodes }: CodeManagementProps) {
       return
     }
 
+    if (newCategory === "SEMESTER" && newSemesterLevelIds.length === 0) {
+      toast({
+        title: "오류",
+        description: "학기에 사용할 레벨을 1개 이상 선택해주세요.",
+        variant: "destructive",
+      })
+      return
+    }
+
     try {
       const response = await fetch("/api/admin/codes", {
         method: "POST",
@@ -134,6 +181,7 @@ export function CodeManagement({ initialCodes }: CodeManagementProps) {
           category: newCategory,
           value: newValue,
           order: newOrder,
+          ...(newCategory === "SEMESTER" && { levelIds: newSemesterLevelIds }),
         }),
       })
 
@@ -167,8 +215,11 @@ export function CodeManagement({ initialCodes }: CodeManagementProps) {
       const newCode = await response.json()
       // 성공한 경우에만 새로고침
       await refreshCodes()
+      await refreshSemesterLevelMaps()
+      await refreshSemesterStatus()
       setNewValue("")
       setNewOrder(0)
+      setNewSemesterLevelIds([])
       toast({
         title: "성공",
         description: "코드값이 추가되었습니다.",
@@ -198,6 +249,8 @@ export function CodeManagement({ initialCodes }: CodeManagementProps) {
       }
 
       await refreshCodes() // 서버에서 최신 데이터 가져오기
+      await refreshSemesterLevelMaps()
+      await refreshSemesterStatus()
       toast({
         title: "성공",
         description: "코드값이 삭제되었습니다.",
@@ -214,6 +267,46 @@ export function CodeManagement({ initialCodes }: CodeManagementProps) {
   const gradeCodes = codes.filter((c) => c.category === "GRADE")
   const levelCodes = codes.filter((c) => c.category === "LEVEL")
   const semesterCodes = codes.filter((c) => c.category === "SEMESTER")
+
+  const toggleNewSemesterLevel = (levelId: string, checked: boolean) => {
+    if (checked) {
+      setNewSemesterLevelIds((prev) => Array.from(new Set([...prev, levelId])))
+      return
+    }
+    setNewSemesterLevelIds((prev) => prev.filter((id) => id !== levelId))
+  }
+
+  const toggleEditSemesterLevel = (levelId: string, checked: boolean) => {
+    if (checked) {
+      setEditSemesterLevelIds((prev) => Array.from(new Set([...prev, levelId])))
+      return
+    }
+    setEditSemesterLevelIds((prev) => prev.filter((id) => id !== levelId))
+  }
+
+  const handleSemesterStatusToggle = async (semesterId: string, isActive: boolean) => {
+    try {
+      const response = await fetch(`/api/admin/semester-status/${semesterId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isActive }),
+      })
+      if (!response.ok) {
+        throw new Error("상태 변경 실패")
+      }
+      setSemesterActiveMap((prev) => ({ ...prev, [semesterId]: isActive }))
+      toast({
+        title: "성공",
+        description: isActive ? "학기 상태를 ON으로 변경했습니다." : "학기 상태를 OFF로 변경했습니다.",
+      })
+    } catch {
+      toast({
+        title: "오류",
+        description: "학기 상태 변경에 실패했습니다.",
+        variant: "destructive",
+      })
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -242,6 +335,25 @@ export function CodeManagement({ initialCodes }: CodeManagementProps) {
                 onChange={(e) => setEditOrder(parseInt(e.target.value) || 0)}
               />
             </div>
+            {editingCode?.category === "SEMESTER" && (
+              <div>
+                <Label>사용 레벨 선택</Label>
+                <div className="mt-2 max-h-40 overflow-y-auto rounded border p-3 space-y-2">
+                  {levelCodes.map((level) => {
+                    const checked = editSemesterLevelIds.includes(level.id)
+                    return (
+                      <label key={level.id} className="flex items-center gap-2 text-sm">
+                        <Checkbox
+                          checked={checked}
+                          onCheckedChange={(v) => toggleEditSemesterLevel(level.id, v === true)}
+                        />
+                        <span>{level.value}</span>
+                      </label>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)}>
@@ -308,6 +420,28 @@ export function CodeManagement({ initialCodes }: CodeManagementProps) {
               </Button>
             </div>
           </div>
+          {newCategory === "SEMESTER" && (
+            <div className="mt-4">
+              <Label>학기에 사용할 레벨</Label>
+              <div className="mt-2 max-h-44 overflow-y-auto rounded border p-3 space-y-2">
+                {levelCodes.map((level) => {
+                  const checked = newSemesterLevelIds.includes(level.id)
+                  return (
+                    <label key={level.id} className="flex items-center gap-2 text-sm">
+                      <Checkbox
+                        checked={checked}
+                        onCheckedChange={(v) => toggleNewSemesterLevel(level.id, v === true)}
+                      />
+                      <span>{level.value}</span>
+                    </label>
+                  )
+                })}
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">
+                선택한 학기 사용 시 학생 화면에는 체크한 레벨만 표시됩니다.
+              </p>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -412,6 +546,8 @@ export function CodeManagement({ initialCodes }: CodeManagementProps) {
                 <TableRow>
                   <TableHead>값</TableHead>
                   <TableHead>순서</TableHead>
+                  <TableHead>상태</TableHead>
+                  <TableHead>연결 레벨</TableHead>
                   <TableHead>작업</TableHead>
                 </TableRow>
               </TableHeader>
@@ -420,6 +556,23 @@ export function CodeManagement({ initialCodes }: CodeManagementProps) {
                   <TableRow key={code.id}>
                     <TableCell>{code.value}</TableCell>
                     <TableCell>{code.order}</TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground">
+                          {(semesterActiveMap[code.id] ?? true) ? "ON" : "OFF"}
+                        </span>
+                        <Switch
+                          checked={semesterActiveMap[code.id] ?? true}
+                          onCheckedChange={(checked) => handleSemesterStatusToggle(code.id, checked)}
+                        />
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {(semesterLevelMapBySemester[code.id] || [])
+                        .map((levelId) => levelCodes.find((l) => l.id === levelId)?.value || null)
+                        .filter(Boolean)
+                        .join(", ") || "전체"}
+                    </TableCell>
                     <TableCell>
                       <div className="flex gap-2">
                         <Button

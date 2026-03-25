@@ -44,3 +44,6 @@ next-env.d.ts
 
 # local backups (민감 데이터 포함 가능)
 /backups
+
+# 로컬 Python 의존성 복사본
+.pydeps/

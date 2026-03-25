@@ -85,7 +85,7 @@ CREATE TABLE "Student" (
     "campusId" TEXT NOT NULL,
     "gradeId" TEXT,
     "school" TEXT,
-    "autoLoginToken" TEXT,
+    "autoLoginTokenHash" TEXT,
     "autoLoginTokenExpiresAt" TIMESTAMP(3),
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
@@ -94,11 +94,11 @@ CREATE TABLE "Student" (
 );
 
 CREATE UNIQUE INDEX "Student_username_key" ON "Student"("username");
-CREATE UNIQUE INDEX "Student_autoLoginToken_key" ON "Student"("autoLoginToken");
+CREATE UNIQUE INDEX "Student_autoLoginTokenHash_key" ON "Student"("autoLoginTokenHash");
 CREATE INDEX "Student_campusId_idx" ON "Student"("campusId");
 CREATE INDEX "Student_status_idx" ON "Student"("status");
 CREATE INDEX "Student_username_idx" ON "Student"("username");
-CREATE INDEX "Student_autoLoginToken_idx" ON "Student"("autoLoginToken");
+CREATE INDEX "Student_autoLoginTokenHash_idx" ON "Student"("autoLoginTokenHash");
 
 ALTER TABLE "Student" ADD CONSTRAINT "Student_campusId_fkey" FOREIGN KEY ("campusId") REFERENCES "Campus"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 ALTER TABLE "Student" ADD CONSTRAINT "Student_gradeId_fkey" FOREIGN KEY ("gradeId") REFERENCES "Code"("id") ON DELETE SET NULL ON UPDATE CASCADE;
