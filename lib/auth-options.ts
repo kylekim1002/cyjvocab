@@ -1,20 +1,7 @@
 import { type NextAuthOptions } from "next-auth"
 import CredentialsProvider from "next-auth/providers/credentials"
-import { prisma } from "@/lib/prisma"
 import { verifyCredentials, verifyAutoLoginToken, checkRateLimit } from "@/lib/auth"
 import { UserRole, StudentStatus } from "@prisma/client"
-
-// Prisma 연결 확인
-async function ensurePrismaConnection() {
-  try {
-    // 간단한 쿼리로 연결 확인
-    await prisma.$queryRaw`SELECT 1`
-  } catch (error) {
-    console.error("Prisma connection failed in auth-options:", error)
-    // 연결 실패해도 에러를 throw하지 않고 로그만 남김
-    // 인증은 계속 진행하되, DB 쿼리는 실패할 수 있음
-  }
-}
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -24,13 +11,11 @@ export const authOptions: NextAuthOptions = {
         name: { label: "이름", type: "text" },
         username: { label: "전화번호 뒷 4자리", type: "text" },
         password: { label: "비밀번호", type: "password" },
+        loginType: { label: "로그인 타입", type: "text" },
         autoLogin: { label: "자동로그인", type: "text" },
       },
       async authorize(credentials, req) {
         try {
-          // Prisma 연결 확인 (에러가 나도 계속 진행)
-          await ensurePrismaConnection()
-
         // 자동로그인 처리 (password가 특별한 값인 경우)
         if (credentials?.password === "auto-login-token" && credentials?.username) {
             try {
@@ -53,8 +38,10 @@ export const authOptions: NextAuthOptions = {
           return null
         }
 
-        // 일반 로그인 (학생/관리자 모두: 이름 + 숫자4자리(username))
+        // 일반 로그인
         if (!credentials?.username) return null
+        const loginType =
+          credentials?.loginType === "admin" ? "admin" : "student"
 
         // 레이트 리밋 확인
           try {
@@ -79,7 +66,8 @@ export const authOptions: NextAuthOptions = {
           credentials.username,
           credentials.password ?? "",
           credentials.name ?? undefined,
-          Array.isArray(ipAddress) ? ipAddress[0] : ipAddress
+          Array.isArray(ipAddress) ? ipAddress[0] : ipAddress,
+          loginType
         )
 
         if (!user) {

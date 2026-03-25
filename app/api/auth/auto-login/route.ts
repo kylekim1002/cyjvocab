@@ -1,8 +1,21 @@
 import { NextResponse } from "next/server"
-import { verifyAutoLoginToken } from "@/lib/auth"
+import {
+  verifyAutoLoginToken,
+  getAutoLoginCandidateByToken,
+  isAutoLoginLocked,
+  recordAutoLoginAttemptAndCheckLock,
+} from "@/lib/auth"
+import { checkAutoLoginIpRateLimit } from "@/lib/rate-limit-ip"
 
 export async function POST(request: Request) {
   try {
+    if (!(await checkAutoLoginIpRateLimit(request))) {
+      return NextResponse.json(
+        { error: "요청이 너무 많습니다. 잠시 후 다시 시도해주세요." },
+        { status: 429 }
+      )
+    }
+
     const { token } = await request.json()
 
     if (!token) {
@@ -10,6 +23,33 @@ export async function POST(request: Request) {
         { error: "토큰이 필요합니다." },
         { status: 400 }
       )
+    }
+
+    const ipAddress =
+      request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+      request.headers.get("x-real-ip")?.trim() ||
+      undefined
+
+    const candidate = await getAutoLoginCandidateByToken(token)
+    if (candidate?.userId) {
+      const locked = await isAutoLoginLocked(candidate.userId)
+      if (locked) {
+        return NextResponse.json(
+          { error: "로그인 횟수로 인해 10분간 정지됩니다." },
+          { status: 429 }
+        )
+      }
+
+      const shouldLockNow = await recordAutoLoginAttemptAndCheckLock(
+        candidate.userId,
+        ipAddress
+      )
+      if (shouldLockNow) {
+        return NextResponse.json(
+          { error: "로그인 횟수로 인해 10분간 정지됩니다." },
+          { status: 429 }
+        )
+      }
     }
 
     const user = await verifyAutoLoginToken(token)
@@ -35,7 +75,6 @@ export async function POST(request: Request) {
     return NextResponse.json({
       username: user.username,
       id: user.id,
-      token: token, // 토큰도 반환
     })
   } catch (error) {
     console.error("Auto login error:", error)

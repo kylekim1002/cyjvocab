@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth-options"
 import { prisma } from "@/lib/prisma"
 import bcrypt from "bcryptjs"
+import { hashAutoLoginToken } from "@/lib/auto-login-token"
 import { generateAutoLoginToken } from "@/lib/utils"
 
 export async function GET(request: Request) {
@@ -19,9 +20,7 @@ export async function GET(request: Request) {
     const gradeId = searchParams.get("grade_id")
     const levelId = searchParams.get("level_id")
 
-    const where: any = {
-      status: "ACTIVE",
-    }
+    const where: any = {}
     
     // campus_id가 있으면 필터링, 없으면 모든 학생 조회
     if (campusId) {
@@ -40,7 +39,7 @@ export async function GET(request: Request) {
       where.levelId = levelId
     }
 
-    const students = await prisma.student.findMany({
+    const rawStudents = await prisma.student.findMany({
       where,
       include: {
         campus: {
@@ -61,6 +60,14 @@ export async function GET(request: Request) {
         },
       },
       orderBy: { name: "asc" },
+    })
+
+    const students = rawStudents.map((s) => {
+      const { autoLoginTokenHash, ...rest } = s
+      return {
+        ...rest,
+        hasAutoLoginLink: !!autoLoginTokenHash,
+      }
     })
 
     return NextResponse.json(students)
@@ -194,7 +201,8 @@ export async function POST(request: Request) {
     const hashedPassword = await bcrypt.hash(phoneLast4, 10)
 
     // 자동로그인 토큰 생성
-    const autoLoginToken = generateAutoLoginToken()
+    const plainAutoLoginToken = generateAutoLoginToken()
+    const autoLoginTokenHash = hashAutoLoginToken(plainAutoLoginToken)
     const expiresAt = new Date()
     expiresAt.setFullYear(expiresAt.getFullYear() + 1)
 
@@ -241,13 +249,12 @@ export async function POST(request: Request) {
           name: studentName,
           username: phoneLast4,
           password: hashedPassword,
-          plainPassword: null,
           campusId: trimmedCampusId,
           gradeId: trimmedGradeId,
           levelId: trimmedLevelId,
           school: school?.trim() || null,
           status: status || "ACTIVE",
-          autoLoginToken,
+          autoLoginTokenHash,
           autoLoginTokenExpiresAt: expiresAt,
         },
       })
@@ -255,9 +262,10 @@ export async function POST(request: Request) {
       return student
     })
 
+    const { autoLoginTokenHash: _h, ...studentJson } = result
     return NextResponse.json({
-      ...result,
-      autoLoginToken,
+      ...studentJson,
+      autoLoginToken: plainAutoLoginToken,
     })
   } catch (error: any) {
     console.error("Create student error:", error)
