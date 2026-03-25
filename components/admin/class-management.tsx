@@ -586,6 +586,42 @@ export function ClassManagement({
     }
   }
 
+  // 펼쳐진 "배치된 학생" 목록에서 빠르게 배정 해제(학습 기록 삭제) - 학생 배치 다이얼로그를 다시 열지 않음
+  const handleUnassignStudentsQuick = async (classId: string, studentIds: string[]) => {
+    try {
+      const response = await fetch(`/api/admin/classes/${classId}/students/unassign`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ student_ids: studentIds }),
+      })
+
+      if (!response.ok) {
+        const contentType = response.headers.get("content-type")
+        if (contentType && contentType.includes("application/json")) {
+          const error = await response.json()
+          throw new Error(error.error || "해제 실패")
+        } else {
+          const text = await response.text()
+          console.error("Non-JSON error response:", text)
+          throw new Error(`서버 오류가 발생했습니다. (${response.status})`)
+        }
+      }
+
+      toast({
+        title: "성공",
+        description: "학생 배정이 해제되었습니다. (학습 기록 삭제 포함)",
+      })
+
+      await loadClassStudents(classId)
+    } catch (error: any) {
+      toast({
+        title: "오류",
+        description: error.message || "학생 배치 해제에 실패했습니다.",
+        variant: "destructive",
+      })
+    }
+  }
+
   // 학습 등록 다이얼로그 열기
   const handleOpenLearningAssignDialog = async (cls: Class) => {
     console.log("Opening learning assign dialog for class:", cls)
@@ -1323,10 +1359,26 @@ export function ClassManagement({
                                     <span className="text-gray-600">{student.level}</span>
                                   )}
                                 </div>
-                                <div className="text-xs text-gray-500">
-                                  {student.assignedAt
-                                    ? new Date(student.assignedAt).toLocaleDateString("ko-KR")
-                                    : "-"}
+                                <div className="flex items-center gap-3">
+                                  <div className="text-xs text-gray-500">
+                                    {student.assignedAt
+                                      ? new Date(student.assignedAt).toLocaleDateString("ko-KR")
+                                      : "-"}
+                                  </div>
+                                  <Button
+                                    type="button"
+                                    variant="destructive"
+                                    size="sm"
+                                    onClick={(e) => {
+                                      e.preventDefault()
+                                      e.stopPropagation()
+                                      const ok = confirm("정말 이 반에서 학생을 제거하시겠습니까? 이 반의 학습 기록이 삭제됩니다.")
+                                      if (!ok) return
+                                      handleUnassignStudentsQuick(cls.id, [student.id]).catch(() => null)
+                                    }}
+                                  >
+                                    배정 삭제
+                                  </Button>
                                 </div>
                               </div>
                             ))}
