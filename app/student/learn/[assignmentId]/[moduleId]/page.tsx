@@ -176,11 +176,17 @@ export default async function LearningPage({
     const inProgressSession = findSessionForPhase(inProgressCandidates, phase)
     const completedSession = findSessionForPhase(completedCandidates, phase)
 
+    // 완료 세션이 존재하면(특히 테스트) 남아있는 IN_PROGRESS 세션이 있더라도
+    // 사용자 입장에서는 "완료 후 다시보기" 흐름이 우선되어야 합니다.
+    // (DB에 오래된 IN_PROGRESS가 남아있어도 completion UI가 뜨도록 방어)
+    const effectiveInProgressSession =
+      !isReviewMode && phase === "test" && completedSession ? null : inProgressSession
+
     return (
       <LearningContent
         module={module}
         assignmentId={params.assignmentId}
-        inProgressSession={inProgressSession}
+        inProgressSession={effectiveInProgressSession}
         progress={progress}
         isReviewMode={isReviewMode}
         completedSession={completedSession}
