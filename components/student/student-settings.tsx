@@ -56,13 +56,6 @@ export function StudentSettings({ student }: StudentSettingsProps) {
 
       <Card>
         <CardHeader>
-          <CardTitle>자동로그인 링크</CardTitle>
-        </CardHeader>
-        <CardContent />
-      </Card>
-
-      <Card>
-        <CardHeader>
           <CardTitle>계정</CardTitle>
         </CardHeader>
         <CardContent>
