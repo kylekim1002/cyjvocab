@@ -11,7 +11,7 @@ export default async function SettingsPage() {
     return null
   }
 
-  const student = await prisma.student.findUnique({
+  const row = await prisma.student.findUnique({
     where: { id: session.user.studentId },
     include: {
       campus: true,
@@ -19,8 +19,17 @@ export default async function SettingsPage() {
     },
   })
 
-  if (!student) {
+  if (!row) {
     return null
+  }
+
+  const student = {
+    id: row.id,
+    name: row.name,
+    username: row.username,
+    hasAutoLoginLink: !!row.autoLoginTokenHash,
+    campus: row.campus,
+    grade: row.grade,
   }
 
   return <StudentSettings student={student} />

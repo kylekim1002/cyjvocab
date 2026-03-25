@@ -3,15 +3,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { useToast } from "@/components/ui/use-toast"
 import { signOut } from "next-auth/react"
-import { Copy } from "lucide-react"
 
 interface Student {
   id: string
   name: string
   username: string
-  autoLoginToken: string | null
+  /** 평문 토큰은 DB에 저장하지 않으므로 링크 URL은 표시하지 않음 */
+  hasAutoLoginLink: boolean
   campus: {
     name: string
   }
@@ -25,20 +24,6 @@ interface StudentSettingsProps {
 }
 
 export function StudentSettings({ student }: StudentSettingsProps) {
-  const { toast } = useToast()
-  const autoLoginToken = student.autoLoginToken
-
-  const handleCopyToken = () => {
-    if (!autoLoginToken) return
-
-    const url = `${window.location.origin}/s/auto/${autoLoginToken}`
-    navigator.clipboard.writeText(url)
-    toast({
-      title: "복사 완료",
-      description: "자동로그인 링크가 복사되었습니다.",
-    })
-  }
-
   return (
     <div className="container mx-auto p-4 space-y-4">
       <h1 className="text-2xl font-bold">설정</h1>
@@ -74,19 +59,11 @@ export function StudentSettings({ student }: StudentSettingsProps) {
           <CardTitle>자동로그인 링크</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          {autoLoginToken ? (
-            <div>
-              <Label>링크</Label>
-              <div className="flex gap-2">
-                <Input
-                  value={`${typeof window !== "undefined" ? window.location.origin : ""}/s/auto/${autoLoginToken}`}
-                  readOnly
-                />
-                <Button type="button" onClick={handleCopyToken}>
-                  <Copy className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
+          {student.hasAutoLoginLink ? (
+            <p className="text-sm text-muted-foreground">
+              자동로그인 링크는 보안을 위해 이 화면에 표시되지 않습니다. 링크가 필요하면
+              캠퍼스 관리자에게 요청해 주세요. (관리자 화면에서 재발급·복사 가능)
+            </p>
           ) : (
             <p className="text-muted-foreground">
               자동로그인 링크가 없습니다. 발급이 필요하면 캠퍼스(관리자)에 문의해 주세요.
