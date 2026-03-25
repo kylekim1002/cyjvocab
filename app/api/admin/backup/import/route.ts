@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth-options"
 import { prisma } from "@/lib/prisma"
+import { hashAutoLoginToken } from "@/lib/auto-login-token"
 
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions)
@@ -147,19 +148,25 @@ export async function POST(request: Request) {
 
         if (data.students && Array.isArray(data.students)) {
           for (const student of data.students) {
+          const s = student as {
+            autoLoginTokenHash?: string | null
+            autoLoginToken?: string | null
+          }
+          const autoLoginTokenHash =
+            s.autoLoginTokenHash ||
+            (s.autoLoginToken ? hashAutoLoginToken(s.autoLoginToken) : null)
           await tx.student.create({
             data: {
               id: student.id,
               name: student.name,
               username: student.username,
               password: student.password,
-              plainPassword: student.plainPassword,
               status: student.status,
               campusId: student.campusId,
               gradeId: student.gradeId,
               levelId: student.levelId,
               school: student.school,
-              autoLoginToken: student.autoLoginToken,
+              autoLoginTokenHash,
               autoLoginTokenExpiresAt: student.autoLoginTokenExpiresAt
                 ? new Date(student.autoLoginTokenExpiresAt)
                 : null,
