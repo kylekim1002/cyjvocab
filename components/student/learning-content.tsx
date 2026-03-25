@@ -1164,7 +1164,10 @@ export function LearningContent({
           <DialogFooter>
             <Button
               type="button"
-              onClick={() => setShowResultDialog(false)}
+              onClick={() => {
+                setShowResultDialog(false)
+                handleResultDialogClosed()
+              }}
               disabled={showCalendarPrepOverlay}
             >
               닫기
