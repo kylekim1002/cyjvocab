@@ -29,7 +29,17 @@ export default async function StudentHomePage() {
           where: {
             endAt: null, // 현재 배정된 클래스만
           },
-          select: { classId: true },
+          select: {
+            classId: true,
+            class: {
+              select: {
+                id: true,
+                name: true,
+                campus: { select: { id: true, name: true } },
+                teacher: { select: { name: true } },
+              },
+            },
+          },
         },
       },
     })
@@ -60,6 +70,12 @@ export default async function StudentHomePage() {
 
     // 현재 배정된 클래스 ID 목록
     const currentClassIds = student.studentClasses.map((sc) => sc.classId)
+    const activeStudentClasses = student.studentClasses.map((sc) => ({
+      classId: sc.classId,
+      className: sc.class?.name ?? "",
+      teacherName: sc.class?.teacher?.name ?? "",
+      campusName: sc.class?.campus?.name ?? "",
+    }))
 
     // 코드값 + 배정 목록을 한 번에 병렬 조회 (홈 로딩 지연 단축)
     const [semesterCodes, levelCodes, allAssignments, semesterLevelRows, semesterStatusRows] = await Promise.all([
@@ -183,6 +199,7 @@ export default async function StudentHomePage() {
         semesterCodes={filteredSemesterCodes}
         levelCodes={filteredLevelCodesNormalized}
         semesterLevelMapBySemester={semesterLevelMapBySemester}
+        activeStudentClasses={toClientAssignments(activeStudentClasses)}
       />
     )
   } catch (error) {

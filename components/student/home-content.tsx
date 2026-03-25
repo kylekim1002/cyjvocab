@@ -37,6 +37,12 @@ interface StudentHomeContentProps {
   semesterCodes: Array<{ id: string; value: string }>
   levelCodes: Array<{ id: string; value: string }>
   semesterLevelMapBySemester?: Record<string, string[]>
+  activeStudentClasses: Array<{
+    classId: string
+    className: string
+    teacherName: string
+    campusName: string
+  }>
 }
 
 type Phase = "wordlist" | "wordlearning" | "memorization" | "writing" | "test"
@@ -80,6 +86,7 @@ export function StudentHomeContent({
   semesterCodes,
   levelCodes,
   semesterLevelMapBySemester = {},
+  activeStudentClasses,
 }: StudentHomeContentProps) {
   const [selectedPhase, setSelectedPhase] = useState<Phase>("wordlist")
   const [monthCursor, setMonthCursor] = useState(() => {
@@ -93,6 +100,7 @@ export function StudentHomeContent({
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [selectedSemesterId, setSelectedSemesterId] = useState<string>("")
   const [selectedLevelId, setSelectedLevelId] = useState<string>("")
+  const [selectedClassId, setSelectedClassId] = useState<string>(activeStudentClasses[0]?.classId || "")
   const [searchQuery, setSearchQuery] = useState("")
   const [moduleResults, setModuleResults] = useState<Array<{ id: string; title: string; type: string }>>([])
   const [selectedModuleId, setSelectedModuleId] = useState<string>("")
@@ -209,6 +217,7 @@ export function StudentHomeContent({
     if (!isAddDialogOpen) return
     // 목록이 로딩되거나 값이 바뀌는 상황에서도 검색이 비지 않도록,
     // 다이얼로그를 열 때마다 현재 데이터의 첫 항목으로 초기화합니다.
+    setSelectedClassId(activeStudentClasses[0]?.classId || "")
     setSelectedSemesterId(semesterCodes[0]?.id || "")
     const firstSemesterId = semesterCodes[0]?.id || ""
     const allowedLevels = firstSemesterId ? getAllowedLevelsForSemester(firstSemesterId) : levelCodes
@@ -216,7 +225,7 @@ export function StudentHomeContent({
     setSearchQuery("")
     setSelectedModuleId("")
     setModuleResults([])
-  }, [isAddDialogOpen, semesterCodes, levelCodes, semesterLevelMapBySemester])
+  }, [isAddDialogOpen, semesterCodes, levelCodes, semesterLevelMapBySemester, activeStudentClasses])
 
   // 학기 변경 시 허용 레벨 목록을 다시 맞춤
   useEffect(() => {
@@ -481,6 +490,24 @@ export function StudentHomeContent({
           </DialogHeader>
 
           <div className="space-y-4">
+            {activeStudentClasses.length > 1 && (
+              <div className="space-y-2">
+                <div className="text-sm font-medium">배정 반 *</div>
+                <Select value={selectedClassId} onValueChange={setSelectedClassId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="반 선택" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {activeStudentClasses.map((c) => (
+                      <SelectItem key={c.classId} value={c.classId}>
+                        {c.teacherName} - {c.className} ({c.campusName})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
             <div className="space-y-2">
               <div className="text-sm font-medium">학기 *</div>
               <Select value={selectedSemesterId} onValueChange={setSelectedSemesterId}>
@@ -556,7 +583,7 @@ export function StudentHomeContent({
               </Button>
               <Button
                 type="button"
-                disabled={!selectedDateKey || !selectedModuleId}
+                disabled={!selectedDateKey || !selectedModuleId || !selectedClassId}
                 onClick={async () => {
                   if (!selectedDateKey) return
                   try {
@@ -569,6 +596,7 @@ export function StudentHomeContent({
                         semesterId: selectedSemesterId,
                         levelId: selectedLevelId,
                         moduleId: selectedModuleId,
+                        classId: selectedClassId,
                       }),
                     })
                     if (!res.ok) {

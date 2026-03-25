@@ -120,22 +120,6 @@ export async function POST(
     // 트랜잭션으로 배치 처리
     await prisma.$transaction(async (tx) => {
       for (const studentId of student_ids) {
-        // 기존 배정 확인 (endAt이 NULL인 경우)
-        const existingAssignment = await tx.studentClass.findFirst({
-          where: {
-            studentId,
-            endAt: null,
-          },
-        })
-
-        // 기존 배정이 있으면 종료 처리
-        if (existingAssignment) {
-          await tx.studentClass.update({
-            where: { id: existingAssignment.id },
-            data: { endAt: new Date() },
-          })
-        }
-
         // 이미 이 클래스에 배정되어 있는지 확인 (endAt이 NULL인 경우)
         const existingInClass = await tx.studentClass.findFirst({
           where: {

@@ -17,6 +17,7 @@ export async function POST(request: Request) {
     const schema = z.object({
       date: z.string().min(1),
       moduleId: z.string().min(1),
+      classId: z.string().optional(),
       semesterId: z.string().optional(),
       levelId: z.string().optional(),
     })
@@ -29,7 +30,7 @@ export async function POST(request: Request) {
       )
     }
 
-    const { date, moduleId } = parsed.data
+    const { date, moduleId, classId } = parsed.data
 
     // 날짜를 'YYYY-MM-DD' 기준으로 00:00으로 정규화
     const assignedDate = new Date(date)
@@ -60,11 +61,19 @@ export async function POST(request: Request) {
       )
     }
 
-    const anchorClassId = student.studentClasses[0]?.classId
+    const activeClassIds = student.studentClasses.map((sc) => sc.classId)
+    const anchorClassId = classId ? classId : student.studentClasses[0]?.classId
     if (!anchorClassId) {
       return NextResponse.json(
         { error: "배정된 클래스가 없어 학습을 추가할 수 없습니다." },
         { status: 404 }
+      )
+    }
+
+    if (classId && !activeClassIds.includes(classId)) {
+      return NextResponse.json(
+        { error: "선택한 반에 배정되어 있지 않습니다." },
+        { status: 403 }
       )
     }
 
