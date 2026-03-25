@@ -57,7 +57,9 @@ export function LearningManagement({
   codes,
 }: LearningManagementProps) {
   const { toast } = useToast()
-  const [modules, setModules] = useState(initialModules || [])
+  // 요구사항: 화면 진입 시 학습 목록이 바로 보이면 안 됨.
+  // 따라서 initialModules는 무시하고, 사용자가 "조회"를 누를 때만 modules를 로드합니다.
+  const [modules, setModules] = useState<LearningModule[]>([])
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [editingModule, setEditingModule] = useState<LearningModule | null>(null)
@@ -110,16 +112,14 @@ export function LearningManagement({
   }
 
   /** 학습 목록 필터: 학기 / 레벨 / 텍스트 검색 */
-  const [filterSemesterId, setFilterSemesterId] = useState<string>("all")
+  const [filterSemesterId, setFilterSemesterId] = useState<string>("")
   const [filterLevelId, setFilterLevelId] = useState<string>("all")
   const [listSearchQuery, setListSearchQuery] = useState("")
   const [titleSortOrder, setTitleSortOrder] = useState<"asc" | "desc">("asc")
 
   const filteredModules = useMemo(() => {
     return modules.filter((m) => {
-      if (filterSemesterId !== "all") {
-        if (m.semester?.id !== filterSemesterId) return false
-      }
+      if (filterSemesterId && filterSemesterId !== "all" && m.semester?.id !== filterSemesterId) return false
       if (filterLevelId !== "all") {
         if (m.level.id !== filterLevelId) return false
       }
@@ -164,7 +164,14 @@ export function LearningManagement({
 
   const refreshModules = async () => {
     try {
-      const response = await fetch("/api/admin/learning-modules")
+      // 학기 선택에 따라 API 파라미터를 다르게 사용
+      const effectiveSemesterId = filterSemesterId && filterSemesterId !== "" ? filterSemesterId : "all"
+      const url =
+        effectiveSemesterId !== "all"
+          ? `/api/admin/learning-modules?semesterId=${encodeURIComponent(effectiveSemesterId)}`
+          : "/api/admin/learning-modules"
+
+      const response = await fetch(url)
       if (response.ok) {
         const latestModules = await response.json()
         if (Array.isArray(latestModules) && latestModules.length > 0) {
@@ -175,6 +182,30 @@ export function LearningManagement({
       }
     } catch (error) {
       console.error("Failed to refresh modules:", error)
+    }
+  }
+
+  const [isListLoading, setIsListLoading] = useState(false)
+
+  const handleSearchModules = async () => {
+    // 요구사항: 진입 시 자동 로딩 금지 → 조회 버튼으로만 로딩
+    if (!filterSemesterId) {
+      toast({
+        title: "오류",
+        description: "학기를 선택해주세요.",
+        variant: "destructive",
+      })
+      return
+    }
+    setIsListLoading(true)
+    try {
+      await refreshModules()
+      toast({
+        title: "성공",
+        description: "학습 목록을 조회했습니다.",
+      })
+    } finally {
+      setIsListLoading(false)
     }
   }
 
@@ -263,15 +294,7 @@ export function LearningManagement({
     }
   }
 
-  // initialModules가 있으면 우선 사용, 없을 때만 API 호출
-  useEffect(() => {
-    if (!initialModules || initialModules.length === 0) {
-      refreshModules()
-    } else {
-      setModules(initialModules)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  // 요구사항: 학습 목록은 마운트 시 자동 로딩하지 않습니다.
 
   // 문항 추가
   const handleAddItem = () => {
@@ -1401,10 +1424,10 @@ export function LearningManagement({
               <Label>학기</Label>
               <Select value={filterSemesterId} onValueChange={setFilterSemesterId}>
                 <SelectTrigger>
-                  <SelectValue placeholder="전체" />
+                  <SelectValue placeholder="학기 선택" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">전체</SelectItem>
+                  <SelectItem value="all">전체목록</SelectItem>
                   {semesterCodes.map((c) => (
                     <SelectItem key={c.id} value={c.id}>
                       {c.value}
@@ -1436,6 +1459,16 @@ export function LearningManagement({
                 onChange={(e) => setListSearchQuery(e.target.value)}
                 placeholder="제목, 메모, 학기·레벨·타입 등 검색 (비워두면 전체)"
               />
+            </div>
+            <div className="flex items-end">
+              <Button
+                type="button"
+                onClick={handleSearchModules}
+                disabled={isListLoading || !filterSemesterId}
+                className="whitespace-nowrap"
+              >
+                {isListLoading ? "조회 중..." : "조회"}
+              </Button>
             </div>
           </div>
           <p className="text-sm text-muted-foreground mb-4">

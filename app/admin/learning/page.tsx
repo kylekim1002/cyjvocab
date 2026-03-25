@@ -2,7 +2,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth-options"
 import { LearningManagement } from "@/components/admin/learning-management"
 import { prisma } from "@/lib/prisma"
-import { LearningModule, Code } from "@prisma/client"
+import { Code } from "@prisma/client"
 
 export default async function LearningPage() {
   try {
@@ -12,32 +12,15 @@ export default async function LearningPage() {
     return null
   }
 
-    let modules: (LearningModule & {
-      level: Code
-      semester: Code | null
-      grade: Code | null
-      _count: { items: number }
-    })[] = []
     let codes: Code[] = []
     
     try {
-      [modules, codes] = await Promise.all([
-        prisma.learningModule.findMany({
-          include: {
-            level: true,
-            semester: true,
-            grade: true,
-            _count: { select: { items: true } },
-          },
-          orderBy: { createdAt: "desc" },
-        }),
-        prisma.code.findMany({
-          orderBy: [
-            { category: "asc" },
-            { order: "asc" },
-          ],
-        }),
-      ])
+      codes = await prisma.code.findMany({
+        orderBy: [
+          { category: "asc" },
+          { order: "asc" },
+        ],
+      })
     } catch (error) {
       console.error("Error fetching learning data:", error)
       // 에러가 발생해도 빈 배열로 계속 진행 (컴포넌트에서 처리)
@@ -50,14 +33,7 @@ export default async function LearningPage() {
         <p className="text-muted-foreground">학습 콘텐츠를 등록하고 관리합니다.</p>
       </div>
       <LearningManagement
-        initialModules={modules.map((m) => {
-          const { _count, ...rest } = m
-          return {
-            ...rest,
-            itemCount: _count.items,
-            items: [],
-          }
-        })}
+        initialModules={[]}
         codes={codes}
       />
     </div>
