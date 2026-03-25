@@ -7,6 +7,9 @@ import { LearningContent } from "@/components/student/learning-content"
 /** 학습 본문은 정적 import — dynamic 청크 분리 시 추가 네트워크 왕복으로 체감 지연될 수 있어 통합 */
 const SESSION_PHASE_SCAN_LIMIT = 30
 
+// 세션(IN_PROGRESS/COMPLETED)이 즉시 반영되어야 하므로 캐시를 강제 비활성화
+export const dynamic = "force-dynamic"
+
 const sessionSelect = {
   id: true,
   status: true,

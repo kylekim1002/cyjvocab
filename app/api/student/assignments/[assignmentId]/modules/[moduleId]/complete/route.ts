@@ -25,6 +25,8 @@ export async function POST(
         currentIndex: z.coerce.number().int().min(-1).optional(),
         isReview: z.boolean().optional(),
         phase: z.string().max(30).optional(),
+        // 클라이언트가 현재 사용 중인 StudySession id를 전달하면 "완료 처리 대상 세션"을 정확히 고를 수 있음
+        sessionId: z.string().nullable().optional(),
       })
       .passthrough()
 
@@ -33,22 +35,47 @@ export async function POST(
       return NextResponse.json({ error: "잘못된 요청 데이터입니다." }, { status: 400 })
     }
 
-    const { quizAnswers: requestQuizAnswers, currentIndex: requestCurrentIndex, isReview, phase: requestPhase } = parsed.data
+    const {
+      quizAnswers: requestQuizAnswers,
+      currentIndex: requestCurrentIndex,
+      isReview,
+      phase: requestPhase,
+      sessionId: requestSessionId,
+    } = parsed.data
 
     devLog("Complete API called", {
       hasQuizAnswers: !!requestQuizAnswers,
     })
 
+    // 완료 대상 세션을 우선 정확히 선택
+    let studySession = null as any
+
+    if (requestSessionId) {
+      const candidate = await prisma.studySession.findUnique({
+        where: { id: requestSessionId },
+      })
+      if (
+        candidate &&
+        candidate.studentId === session.user.studentId &&
+        candidate.assignmentId === params.assignmentId &&
+        candidate.moduleId === params.moduleId
+      ) {
+        studySession = candidate
+      }
+    }
+
     // 진행 중인 세션 찾기 (IN_PROGRESS 또는 최근 세션)
-    let studySession = await prisma.studySession.findFirst({
-      where: {
-        studentId: session.user.studentId,
-        assignmentId: params.assignmentId,
-        moduleId: params.moduleId,
-        status: "IN_PROGRESS",
-      },
-      orderBy: { updatedAt: "desc" },
-    })
+    if (!studySession) {
+      studySession = await prisma.studySession.findFirst({
+        where: {
+          studentId: session.user.studentId,
+          assignmentId: params.assignmentId,
+          moduleId: params.moduleId,
+          status: "IN_PROGRESS",
+        },
+        orderBy: { updatedAt: "desc" },
+      })
+    }
 
     // IN_PROGRESS 세션이 없으면 최근 세션 찾기
     if (!studySession) {
@@ -185,6 +212,19 @@ export async function POST(
         status: "COMPLETED",
         score,
         completedAt,
+      },
+    })
+
+    // 완료 처리 시에는 "남아있는 IN_PROGRESS 세션"이 다음 진입에서 다시 이어지지 않게 정리
+    // (이전 시도/네트워크 지연 등으로 IN_PROGRESS가 여러 개 남을 수 있어 방어)
+    await prisma.studySession.deleteMany({
+      where: {
+        studentId: session.user.studentId,
+        assignmentId: params.assignmentId,
+        moduleId: params.moduleId,
+        status: "IN_PROGRESS",
+        // 완료 처리 대상은 이미 COMPLETED로 바뀌었을 가능성이 높지만, 혹시를 대비해 제외
+        id: { not: studySession.id },
       },
     })
 

@@ -445,6 +445,9 @@ export function LearningContent({
             currentIndex,
             phase,
             isReview: isReviewMode,
+            // 완료 처리 시 "정확히 어떤 세션"을 끝냈는지 서버가 알 수 있게 전달
+            // (IN_PROGRESS 세션이 여러 개 남아 있으면 다른 세션을 이어받는 문제가 생길 수 있음)
+            sessionId: currentSessionId,
           }),
         }
       )
