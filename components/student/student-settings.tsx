@@ -58,18 +58,7 @@ export function StudentSettings({ student }: StudentSettingsProps) {
         <CardHeader>
           <CardTitle>자동로그인 링크</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          {student.hasAutoLoginLink ? (
-            <p className="text-sm text-muted-foreground">
-              자동로그인 링크는 보안을 위해 이 화면에 표시되지 않습니다. 링크가 필요하면
-              캠퍼스 관리자에게 요청해 주세요. (관리자 화면에서 재발급·복사 가능)
-            </p>
-          ) : (
-            <p className="text-muted-foreground">
-              자동로그인 링크가 없습니다. 발급이 필요하면 캠퍼스(관리자)에 문의해 주세요.
-            </p>
-          )}
-        </CardContent>
+        <CardContent />
       </Card>
 
       <Card>
