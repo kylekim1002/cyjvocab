@@ -3,7 +3,14 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { useRouter } from "next/navigation"
 import { useToast } from "@/components/ui/use-toast"
 import { ArrowLeft, ArrowRight, Loader2, Volume2 } from "lucide-react"
@@ -78,6 +85,12 @@ export function LearningContent({
   const [showCalendarPrepOverlay, setShowCalendarPrepOverlay] = useState(false)
   /** 테스트 시작 시 첫 문제 진입 전에 숨은 로딩을 사용자에게 보이도록 타이밍 방어 */
   const [testStartSplash, setTestStartSplash] = useState(false)
+  /** 테스트 완료 후 정오표(학습 결과) 표시 */
+  const [showResultDialog, setShowResultDialog] = useState(false)
+  const [completedScore, setCompletedScore] = useState<number | null>(null)
+  const [completedAnswers, setCompletedAnswers] = useState<Record<number, number>>({})
+  /** 정오표 닫을 때 중복 이동 방지 */
+  const resultDialogNavStartedRef = useRef(false)
 
   // 쓰기학습용 상태 (스펠링 입력 + 기회 3회, 상단은 이모지로 표시)
   const [writingInput, setWritingInput] = useState<string>("")
@@ -496,10 +509,10 @@ export function LearningContent({
           title: "테스트 완료",
           description: `점수: ${score}점`,
         })
-        setShowCalendarPrepOverlay(true)
-        window.setTimeout(() => {
-          router.push("/student#student-calendar")
-        }, 900)
+        resultDialogNavStartedRef.current = false
+        setCompletedScore(score)
+        setCompletedAnswers(normalizedQuizAnswers)
+        setShowResultDialog(true)
       } else {
         // 복습 모드: 토스트만 표시 후 캘린더로 이동 (닫기 X 전에도 2초 후 자동 닫힘). 불필요한 router.refresh 제거
         const score = data.score !== null && data.score !== undefined ? data.score : 0
@@ -523,6 +536,16 @@ export function LearningContent({
       setIsCompleting(false)
       setShowCompleteWaitOverlay(false)
     }
+  }
+
+  /** 학습 결과(정오표) 닫힘 -> 캘린더 이동 전 대기 오버레이 표시 */
+  const handleResultDialogClosed = () => {
+    if (resultDialogNavStartedRef.current) return
+    resultDialogNavStartedRef.current = true
+    setShowCalendarPrepOverlay(true)
+    window.setTimeout(() => {
+      router.push("/student#student-calendar")
+    }, 900)
   }
 
   /**
@@ -768,6 +791,90 @@ export function LearningContent({
     const correctIndex = item.payloadJson.correct_index || 0
     return item.payloadJson[`choice${correctIndex + 1}`] || ""
   }
+
+  // 테스트 정오표: 정답 선택지 인덱스 가져오기
+  const getCorrectAnswerIndex = (item: LearningItem) => {
+    if (!item.payloadJson) return -1
+    return Number(item.payloadJson.correct_index ?? -1)
+  }
+
+  // 학습 결과(정오표) 카드들
+  const resultCards = showResultDialog
+    ? sortedItems.map((item, arrayIndex) => {
+        const correctIndex = getCorrectAnswerIndex(item)
+        const studentAnswer = Number(completedAnswers[arrayIndex] ?? -1)
+        const isCorrectAnswer =
+          !Number.isNaN(studentAnswer) && studentAnswer === correctIndex
+
+        const choices = [
+          item.payloadJson?.choice1,
+          item.payloadJson?.choice2,
+          item.payloadJson?.choice3,
+          item.payloadJson?.choice4,
+        ].filter(Boolean)
+
+        return (
+          <Card
+            key={arrayIndex}
+            className={isCorrectAnswer ? "border-green-500" : "border-red-500"}
+          >
+            <CardContent className="p-4">
+              <div className="flex items-start justify-between mb-2">
+                <div className="flex-1">
+                  <p className="font-medium text-lg">
+                    {item.payloadJson?.word_text || `문항 ${arrayIndex + 1}`}
+                  </p>
+                  {module.type === "TYPE_B" && item.payloadJson?.image_url && (
+                    <img
+                      src={item.payloadJson.image_url}
+                      alt={item.payloadJson?.word_text || ""}
+                      className="max-w-full h-auto mt-2 rounded-lg"
+                      style={{ maxHeight: "200px" }}
+                      loading="lazy"
+                      decoding="async"
+                    />
+                  )}
+                </div>
+                <div className="ml-4">
+                  {isCorrectAnswer ? (
+                    <span className="text-green-600 font-bold text-lg">O</span>
+                  ) : (
+                    <span className="text-red-600 font-bold text-lg">X</span>
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-1 mt-3">
+                {choices.map((choice, choiceIdx) => {
+                  const isCorrectChoice = choiceIdx === correctIndex
+                  const isSelected = choiceIdx === studentAnswer
+                  return (
+                    <div
+                      key={choiceIdx}
+                      className={`p-2 rounded ${
+                        isCorrectChoice
+                          ? "bg-green-100 border border-green-500"
+                          : isSelected
+                          ? "bg-red-100 border border-red-500"
+                          : "bg-gray-50"
+                      }`}
+                    >
+                      {choiceIdx + 1}. {choice}
+                      {isCorrectChoice && (
+                        <span className="ml-2 text-green-600 font-bold">(정답)</span>
+                      )}
+                      {isSelected && !isCorrectChoice && (
+                        <span className="ml-2 text-red-600 font-bold">(선택한 답)</span>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        )
+      })
+    : null
 
   // 쓰기학습에서 입력/정답으로 사용할 단어(스펠링)
   const getExpectedSpelling = (item: LearningItem) => {
@@ -1034,6 +1141,38 @@ export function LearningContent({
 
   return (
     <div className="container mx-auto p-4 space-y-4">
+      {/* 테스트 결과 정오표(학습 결과) */}
+      <Dialog
+        open={showResultDialog}
+        onOpenChange={(open) => {
+          setShowResultDialog(open)
+          if (!open) {
+            handleResultDialogClosed()
+          }
+        }}
+      >
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>학습 결과</DialogTitle>
+            <DialogDescription>
+              {completedScore !== null ? `점수: ${completedScore}점` : ""}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">{resultCards}</div>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              onClick={() => setShowResultDialog(false)}
+              disabled={showCalendarPrepOverlay}
+            >
+              닫기
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <div className="flex gap-3 items-start justify-between">
         <div className="min-w-0 flex-1 pr-1">
           <h1 className="text-lg sm:text-2xl font-bold leading-snug break-words">
