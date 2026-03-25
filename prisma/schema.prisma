@@ -6,8 +6,11 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  /// 서버리스(Vercel)에서는 Supabase **Transaction pooler**(예: 포트 6543) 권장
+  url       = env("DATABASE_URL")
+  /// 마이그레이션·introspect용 직접 연결(예: 포트 5432). 풀러만 쓸 때 필수.
+  directUrl = env("DIRECT_URL")
 }
 
 enum UserRole {
@@ -143,13 +146,13 @@ model Student {
   name              String
   username          String
   password          String
-  plainPassword     String?         // 관리자용 평문 비밀번호 (보안 주의)
   status            StudentStatus   @default(ACTIVE)
   campusId          String
   gradeId           String?
   levelId           String?
   school            String?
-  autoLoginToken    String?         @unique
+  /// SHA-256(hex) of 자동로그인 토큰(평문은 DB에 저장하지 않음)
+  autoLoginTokenHash String?        @unique
   autoLoginTokenExpiresAt DateTime?
   createdAt         DateTime        @default(now())
   updatedAt         DateTime        @updatedAt
@@ -169,7 +172,7 @@ model Student {
   @@index([campusId])
   @@index([status])
   @@index([username])
-  @@index([autoLoginToken])
+  @@index([autoLoginTokenHash])
 }
 
 model StudentClass {
@@ -231,6 +234,17 @@ model LearningItem {
 
 /// 단어(정규화 키)별 공용 음원 풀 — 학습 문항 word_text와 매칭해 audio_url 자동 연결에 사용
 model WordAudio {
+  id               String   @id @default(cuid())
+  normalizedKey    String   @unique
+  publicUrl        String
+  storagePath      String
+  originalFilename String
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+/// 단어(정규화 키)별 공용 이미지 풀 — TYPE_B 문항 word_text와 매칭해 image_url 자동 연결에 사용
+model WordImage {
   id               String   @id @default(cuid())
   normalizedKey    String   @unique
   publicUrl        String
@@ -415,5 +429,20 @@ model LoginAttempt {
 
   @@index([username, createdAt])
   @@index([userId, createdAt])
+  @@index([createdAt])
+}
+
+/// 학생 앱 전역 배경(웹 배경 이미지). 활성은 애플리케이션에서 항상 0~1개로 유지합니다.
+model StudentAppBackground {
+  id          String   @id @default(cuid())
+  /// 관리자용 메모(선택)
+  label       String?
+  storagePath String
+  publicUrl   String
+  isActive    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([isActive])
   @@index([createdAt])
 }

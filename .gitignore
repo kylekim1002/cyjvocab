@@ -37,7 +37,10 @@ yarn-error.log*
 next-env.d.ts
 
 # prisma
-/prisma/migrations
+# migrations는 버전 관리에 포함합니다 (Vercel 등에서 migrate deploy로 적용)
 
 # uploads (로컬 개발용, 프로덕션에서는 Supabase Storage 사용)
 /public/uploads
+
+# local backups (민감 데이터 포함 가능)
+/backups

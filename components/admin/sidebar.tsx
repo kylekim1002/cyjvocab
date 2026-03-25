@@ -19,6 +19,8 @@ import {
   Home,
   Database,
   Volume2,
+  ImageIcon,
+  LayoutTemplate,
 } from "lucide-react"
 
 const menuItems = [
@@ -65,6 +67,16 @@ const menuItems = [
     icon: Volume2,
   },
   {
+    title: "이미지 관리",
+    href: "/admin/word-image",
+    icon: ImageIcon,
+  },
+  {
+    title: "학생 앱 배경",
+    href: "/admin/student-background",
+    icon: LayoutTemplate,
+  },
+  {
     title: "성적 조회",
     href: "/admin/scores",
     icon: BarChart3,
@@ -107,6 +119,7 @@ export function AdminSidebar({ role }: AdminSidebarProps) {
             <Link
               key={item.href}
               href={item.href}
+              prefetch
               className={cn(
                 "flex items-center gap-3 px-4 py-2 rounded-lg transition-colors",
                 isActive
