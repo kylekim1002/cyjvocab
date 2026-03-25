@@ -3,7 +3,11 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth-options"
 import { prisma } from "@/lib/prisma"
 import { supabase, isSupabaseConfigured } from "@/lib/supabase"
-import { STUDENT_BG_BUCKET } from "@/lib/student-app-background"
+import {
+  STUDENT_BG_BUCKET,
+  isStudentAppBackgroundTableMissingError,
+  studentAppBackgroundMissingTableResponse,
+} from "@/lib/student-app-background"
 
 function unauthorized() {
   return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -54,6 +58,9 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     })
     return NextResponse.json(updated)
   } catch (e: unknown) {
+    if (isStudentAppBackgroundTableMissingError(e)) {
+      return studentAppBackgroundMissingTableResponse()
+    }
     console.error("student-backgrounds PATCH:", e)
     const msg = e instanceof Error ? e.message : "저장에 실패했습니다."
     return NextResponse.json({ error: msg }, { status: 500 })
@@ -90,6 +97,9 @@ export async function DELETE(_request: Request, { params }: { params: { id: stri
 
     return NextResponse.json({ ok: true })
   } catch (e: unknown) {
+    if (isStudentAppBackgroundTableMissingError(e)) {
+      return studentAppBackgroundMissingTableResponse()
+    }
     console.error("student-backgrounds DELETE:", e)
     const msg = e instanceof Error ? e.message : "삭제에 실패했습니다."
     return NextResponse.json({ error: msg }, { status: 500 })

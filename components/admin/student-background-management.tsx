@@ -28,18 +28,27 @@ export function StudentBackgroundManagement() {
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [toggleId, setToggleId] = useState<string | null>(null)
   const [labelDraft, setLabelDraft] = useState("")
+  const [tableSetupHint, setTableSetupHint] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
     try {
       const res = await fetch("/api/admin/student-backgrounds")
+      const d = await res.json().catch(() => ({}))
       if (!res.ok) {
-        const d = await res.json().catch(() => ({}))
-        throw new Error((d as { error?: string }).error || "목록을 불러올 수 없습니다.")
+        const typed = d as { error?: string; code?: string; hint?: string }
+        if (typed.code === "MISSING_STUDENT_BG_TABLE") {
+          setTableSetupHint(typed.hint || typed.error || "DB 테이블을 먼저 생성해 주세요.")
+          setRows([])
+          return
+        }
+        throw new Error(typed.error || "목록을 불러올 수 없습니다.")
       }
-      const data = await res.json()
+      setTableSetupHint(null)
+      const data = d
       setRows(Array.isArray(data) ? data : [])
     } catch (e: unknown) {
+      setTableSetupHint(null)
       toast({
         title: "오류",
         description: e instanceof Error ? e.message : "목록 오류",
@@ -137,6 +146,15 @@ export function StudentBackgroundManagement() {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
+        {tableSetupHint ? (
+          <div
+            role="alert"
+            className="rounded-md border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive"
+          >
+            <p className="font-medium">데이터베이스 설정 필요</p>
+            <p className="mt-2 whitespace-pre-wrap text-foreground/90">{tableSetupHint}</p>
+          </div>
+        ) : null}
         <div className="flex flex-col gap-3 max-w-md">
           <div className="space-y-2">
             <Label htmlFor="bg-label">메모 (선택, 업로드 시 함께 저장)</Label>

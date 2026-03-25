@@ -9,6 +9,8 @@ import {
   STUDENT_BG_MAX_BYTES,
   ensureStudentBackgroundBucket,
   isStudentBgMimeAllowed,
+  isStudentAppBackgroundTableMissingError,
+  studentAppBackgroundMissingTableResponse,
 } from "@/lib/student-app-background"
 
 function unauthorized() {
@@ -27,6 +29,9 @@ export async function GET() {
     })
     return NextResponse.json(rows)
   } catch (e: unknown) {
+    if (isStudentAppBackgroundTableMissingError(e)) {
+      return studentAppBackgroundMissingTableResponse()
+    }
     console.error("student-backgrounds GET:", e)
     const msg = e instanceof Error ? e.message : "목록을 불러오지 못했습니다."
     return NextResponse.json({ error: msg }, { status: 500 })
@@ -104,6 +109,9 @@ export async function POST(request: Request) {
 
     return NextResponse.json(row)
   } catch (e: unknown) {
+    if (isStudentAppBackgroundTableMissingError(e)) {
+      return studentAppBackgroundMissingTableResponse()
+    }
     console.error("student-backgrounds POST:", e)
     const msg = e instanceof Error ? e.message : "업로드에 실패했습니다."
     return NextResponse.json({ error: msg }, { status: 500 })
