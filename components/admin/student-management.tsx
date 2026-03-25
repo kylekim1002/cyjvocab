@@ -28,7 +28,6 @@ interface Student {
   id: string
   name: string
   username: string
-  plainPassword: string | null
   status: "ACTIVE" | "INACTIVE"
   campus: {
     id: string
@@ -51,7 +50,8 @@ interface Student {
     value: string
   } | null
   school: string | null
-  autoLoginToken: string | null
+  /** 서버에서 평문 토큰 대신 링크 존재 여부만 전달 */
+  hasAutoLoginLink: boolean
   createdAt: Date
 }
 
@@ -64,67 +64,57 @@ interface StudentManagementProps {
 }
 
 export function StudentManagement({
-  campuses,
-  gradeCodes,
-  levelCodes,
+  campuses: campusesProp,
+  gradeCodes: gradeCodesProp,
+  levelCodes: levelCodesProp,
   initialStudents,
   role,
 }: StudentManagementProps) {
   const { toast } = useToast()
   const router = useRouter()
+  /** 서버 props + 클라이언트 /api/admin/student-form-meta 병합 — MANAGER도 코드 목록 확보 */
+  const [formCampuses, setFormCampuses] = useState(campusesProp)
+  const [formGradeCodes, setFormGradeCodes] = useState(gradeCodesProp)
+  const [formLevelCodes, setFormLevelCodes] = useState(levelCodesProp)
+
+  useEffect(() => {
+    setFormCampuses(campusesProp)
+    setFormGradeCodes(gradeCodesProp)
+    setFormLevelCodes(levelCodesProp)
+  }, [campusesProp, gradeCodesProp, levelCodesProp])
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await fetch("/api/admin/student-form-meta", { cache: "no-store" })
+        if (!res.ok || cancelled) return
+        const d = await res.json()
+        if (cancelled) return
+        if (Array.isArray(d.campuses)) setFormCampuses(d.campuses)
+        if (Array.isArray(d.gradeCodes)) setFormGradeCodes(d.gradeCodes)
+        if (Array.isArray(d.levelCodes)) setFormLevelCodes(d.levelCodes)
+      } catch (e) {
+        console.error("student-form-meta:", e)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   const [isUploading, setIsUploading] = useState(false)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [editingStudent, setEditingStudent] = useState<Student | null>(null)
-  const [students, setStudents] = useState(initialStudents || [])
+  const [students, setStudents] = useState<Student[]>(initialStudents || [])
   const [isResettingAllStudents, setIsResettingAllStudents] = useState(false)
   const [deletingStudentUsernames, setDeletingStudentUsernames] = useState<Record<string, boolean>>({})
   
-  // 서버에서 최신 데이터 가져오기 (성공하고 데이터가 있을 때만 업데이트)
-  const refreshStudents = async () => {
-    try {
-      const response = await fetch("/api/admin/students")
-      if (response.ok) {
-        const latestStudents = await response.json()
-        if (Array.isArray(latestStudents) && latestStudents.length > 0) {
-          // API 응답을 컴포넌트가 기대하는 형식으로 변환
-          const transformedStudents = latestStudents.map((student: any) => ({
-            ...student,
-            campus: student.campus || { id: "", name: "" },
-            grade: student.grade || null,
-            level: student.level || null,
-          }))
-          setStudents(transformedStudents)
-          setFilteredStudents(transformedStudents)
-          console.log("Refreshed students:", transformedStudents.length)
-        } else {
-          console.log("API returned empty array, keeping existing data")
-          // 빈 배열이면 기존 데이터 유지
-        }
-      } else {
-        console.error("Failed to refresh students: HTTP", response.status)
-        const errorText = await response.text()
-        console.error("Error response:", errorText)
-        // 실패해도 기존 데이터 유지
-      }
-    } catch (error) {
-      console.error("Failed to refresh students:", error)
-      // 에러 발생해도 기존 데이터 유지
-    }
-  }
-  
-  // initialStudents가 있으면 우선 사용, 없을 때만 API 호출
   useEffect(() => {
-    if (!initialStudents || initialStudents.length === 0) {
-      console.log("No initial students, fetching from API")
-      refreshStudents()
-    } else {
-      console.log("Using initial students:", initialStudents.length)
-      setStudents(initialStudents)
-      setFilteredStudents(initialStudents)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+    setStudents(initialStudents || [])
+    setFilteredStudents(initialStudents || [])
+  }, [initialStudents])
   
   const [formData, setFormData] = useState({
     campusId: "",
@@ -149,10 +139,14 @@ export function StudentManagement({
   const [filterType, setFilterType] = useState<string>("전체")
   const [filterValue, setFilterValue] = useState<string>("")
   const [filterCodeId, setFilterCodeId] = useState<string>("") // 학년/레벨 코드 ID
-  const [filteredStudents, setFilteredStudents] = useState(initialStudents)
+  const [filteredStudents, setFilteredStudents] = useState<Student[]>(initialStudents || [])
+  const [nameSortOrder, setNameSortOrder] = useState<"asc" | "desc">("asc")
+  const [hasSearched, setHasSearched] = useState((initialStudents?.length ?? 0) > 0)
+  const [isLoadingStudents, setIsLoadingStudents] = useState(false)
   const [isTogglingStatus, setIsTogglingStatus] = useState<Record<string, boolean>>({})
   const [autoLoginToken, setAutoLoginToken] = useState<string | null>(null)
   const [autoLoginUrl, setAutoLoginUrl] = useState<string | null>(null)
+  const [issuedAutoLoginUrls, setIssuedAutoLoginUrls] = useState<Record<string, string>>({})
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -216,21 +210,33 @@ export function StudentManagement({
   }
 
   const handleDownloadTemplate = () => {
-    // 템플릿 엑셀 생성
-    const template = [
-      {
-        campus: "강남캠퍼스",
-        name: "홍길동",
-        grade: "1학년",
-        level: "Wind1",
-        "숫자4자리": "1234",
-        school: "예시초등학교",
-      },
-    ]
+    const sampleCampus = formCampuses[0]?.name ?? "캠퍼스명(캠퍼스관리와동일)"
+    const sampleGrade = formGradeCodes[0]?.value ?? "학년코드값과동일"
+    const sampleLevel = formLevelCodes[0]?.value ?? ""
+    const row: Record<string, string> = {
+      campus: sampleCampus,
+      name: "홍길동",
+      grade: sampleGrade,
+      "숫자4자리": "1234",
+      school: "예시초등학교",
+    }
+    if (sampleLevel) row.level = sampleLevel
+    const template = [row]
 
     const ws = XLSX.utils.json_to_sheet(template)
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, "학생")
+    const guide = [
+      ["아래 컬럼명을 사용할 수 있습니다 (영문 또는 한글)."],
+      ["campus / 캠퍼스", "캠퍼스 관리에 등록된 이름과 동일"],
+      ["name / 이름"],
+      ["grade / 학년", "코드값 관리의 학년(GRADE) 표시값과 동일"],
+      ["level / 레벨", "선택, 코드값 관리 레벨(LEVEL)과 동일"],
+      ["숫자4자리"],
+      ["school / 학교", "선택"],
+    ]
+    const wsGuide = XLSX.utils.aoa_to_sheet(guide)
+    XLSX.utils.book_append_sheet(wb, wsGuide, "컬럼안내")
     XLSX.writeFile(wb, "학생_등록_템플릿.xlsx")
   }
 
@@ -318,12 +324,12 @@ export function StudentManagement({
     }
 
     // 선택한 ID가 실제로 존재하는지 확인
-    const selectedCampus = campuses.find(c => c.id === formData.campusId.trim())
-    const selectedGrade = gradeCodes.find(c => c.id === formData.gradeId.trim())
+    const selectedCampus = formCampuses.find((c) => c.id === formData.campusId.trim())
+    const selectedGrade = formGradeCodes.find((c) => c.id === formData.gradeId.trim())
 
     if (!selectedCampus) {
       console.error("Selected campus not found in available list:", formData.campusId)
-      console.error("Available campuses:", campuses.map(c => ({ id: c.id, name: c.name })))
+      console.error("Available campuses:", formCampuses.map((c) => ({ id: c.id, name: c.name })))
       toast({
         title: "오류",
         description: "선택한 캠퍼스를 찾을 수 없습니다. 페이지를 새로고침해주세요.",
@@ -334,7 +340,7 @@ export function StudentManagement({
 
     if (!selectedGrade) {
       console.error("Selected grade not found in available list:", formData.gradeId)
-      console.error("Available grade codes:", gradeCodes.map(c => ({ id: c.id, value: c.value })))
+      console.error("Available grade codes:", formGradeCodes.map((c) => ({ id: c.id, value: c.value })))
       toast({
         title: "오류",
         description: "선택한 학년을 찾을 수 없습니다. 페이지를 새로고침해주세요.",
@@ -344,24 +350,17 @@ export function StudentManagement({
     }
 
     try {
+      const levelRaw = formData.levelId?.trim()
       const payload = {
         campusId: formData.campusId.trim(),
         name: formData.name.trim(),
         gradeId: formData.gradeId.trim(),
-        levelId: formData.levelId?.trim() || null,
+        levelId:
+          !levelRaw || levelRaw === "none" ? null : levelRaw,
         username: formData.username.trim(),
         school: formData.school?.trim() || null,
         status: formData.status,
       }
-
-      console.log("=== Student Registration Debug ===")
-      console.log("Form data:", formData)
-      console.log("Selected campus:", selectedCampus)
-      console.log("Selected grade:", selectedGrade)
-      console.log("Sending student data:", payload)
-      console.log("Available campuses:", campuses.map(c => ({ id: c.id, name: c.name })))
-      console.log("Available grade codes:", gradeCodes.map(c => ({ id: c.id, value: c.value })))
-      console.log("=================================")
 
       const response = await fetch("/api/admin/students", {
         method: "POST",
@@ -459,59 +458,92 @@ export function StudentManagement({
   }
 
   // 필터링 함수
-  const handleFilter = () => {
-    let filtered = [...students]
-
-    // 조건1: 캠퍼스 필터
-    if (filterCampusId && filterCampusId !== "all") {
-      filtered = filtered.filter((s) => s.campus.id === filterCampusId)
+  const handleFilter = async () => {
+    if (!filterCampusId || filterCampusId === "all") {
+      toast({
+        title: "안내",
+        description: "캠퍼스를 먼저 선택해 주세요.",
+      })
+      return
     }
 
-    // 조건2: 검색 타입별 필터
-    if (filterType !== "전체") {
-      switch (filterType) {
-        case "이름":
-          if (filterValue.trim()) {
-            const searchValue = filterValue.trim().toLowerCase()
-            filtered = filtered.filter((s) =>
-              s.name.toLowerCase().includes(searchValue)
-            )
-          }
-          break
-        case "반명":
-          if (filterValue.trim()) {
-            const searchValue = filterValue.trim().toLowerCase()
-            filtered = filtered.filter((s) =>
-              (s.studentClasses || []).some((sc) =>
-                (sc.class?.name || "").toLowerCase().includes(searchValue)
-              )
-            )
-          }
-          break
-        case "선생님":
-          if (filterValue.trim()) {
-            const searchValue = filterValue.trim().toLowerCase()
-            filtered = filtered.filter((s) =>
-              (s.studentClasses || []).some((sc) =>
-                (sc.class?.teacher?.name || "").toLowerCase().includes(searchValue)
-              )
-            )
-          }
-          break
-        case "학년":
-          if (filterCodeId) {
-            filtered = filtered.filter((s) => s.grade?.id === filterCodeId)
-          }
-          break
-        case "레벨":
-          if (filterCodeId) {
-            filtered = filtered.filter((s) => s.level?.id === filterCodeId)
-          }
-          break
+    setHasSearched(true)
+    setIsLoadingStudents(true)
+    try {
+      const response = await fetch(
+        `/api/admin/students?campus_id=${encodeURIComponent(filterCampusId)}`,
+        { cache: "no-store" }
+      )
+      if (!response.ok) {
+        throw new Error("학생 목록 조회에 실패했습니다.")
       }
-    }
 
-    setFilteredStudents(filtered)
+      const latestStudents = await response.json()
+      const transformedStudents: Student[] = Array.isArray(latestStudents)
+        ? latestStudents.map((student: any) => ({
+            ...student,
+            campus: student.campus || { id: "", name: "" },
+            grade: student.grade || null,
+            level: student.level || null,
+          }))
+        : []
+
+      let filtered = [...transformedStudents]
+      if (filterType !== "전체") {
+        switch (filterType) {
+          case "이름":
+            if (filterValue.trim()) {
+              const searchValue = filterValue.trim().toLowerCase()
+              filtered = filtered.filter((s) =>
+                s.name.toLowerCase().includes(searchValue)
+              )
+            }
+            break
+          case "반명":
+            if (filterValue.trim()) {
+              const searchValue = filterValue.trim().toLowerCase()
+              filtered = filtered.filter((s) =>
+                (s.studentClasses || []).some((sc) =>
+                  (sc.class?.name || "").toLowerCase().includes(searchValue)
+                )
+              )
+            }
+            break
+          case "선생님":
+            if (filterValue.trim()) {
+              const searchValue = filterValue.trim().toLowerCase()
+              filtered = filtered.filter((s) =>
+                (s.studentClasses || []).some((sc) =>
+                  (sc.class?.teacher?.name || "").toLowerCase().includes(searchValue)
+                )
+              )
+            }
+            break
+          case "학년":
+            if (filterCodeId) {
+              filtered = filtered.filter((s) => s.grade?.id === filterCodeId)
+            }
+            break
+          case "레벨":
+            if (filterCodeId) {
+              filtered = filtered.filter((s) => s.level?.id === filterCodeId)
+            }
+            break
+        }
+      }
+
+      setStudents(transformedStudents)
+      setFilteredStudents(filtered)
+      setHasSearched(true)
+    } catch (error: any) {
+      toast({
+        title: "오류",
+        description: error?.message || "학생 목록 조회에 실패했습니다.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoadingStudents(false)
+    }
   }
 
   // 필터 초기화
@@ -520,7 +552,9 @@ export function StudentManagement({
     setFilterType("전체")
     setFilterValue("")
     setFilterCodeId("")
-    setFilteredStudents(students)
+    setStudents([])
+    setFilteredStudents([])
+    setHasSearched(false)
   }
 
   // 검색 타입 변경 시 필터 값 초기화
@@ -529,6 +563,27 @@ export function StudentManagement({
     setFilterValue("")
     setFilterCodeId("")
   }
+
+  const sortedFilteredStudents = [...filteredStudents].sort((a, b) => {
+    const left = (a.name || "").trim()
+    const right = (b.name || "").trim()
+    return nameSortOrder === "asc"
+      ? left.localeCompare(right, "ko")
+      : right.localeCompare(left, "ko")
+  })
+
+  useEffect(() => {
+    if (!filterCampusId || filterCampusId === "all") {
+      setStudents([])
+      setFilteredStudents([])
+      setHasSearched(false)
+      return
+    }
+    // 캠퍼스를 바꾸면 이전 캠퍼스 조회 결과를 숨기고 다시 조회하도록 유도
+    setStudents([])
+    setFilteredStudents([])
+    setHasSearched(false)
+  }, [filterCampusId])
 
   // 학생 전체 초기화 (SUPER_ADMIN만)
   const handleResetAllStudents = async () => {
@@ -745,32 +800,26 @@ export function StudentManagement({
             <div className="space-y-4">
               <div>
                 <Label>캠퍼스 *</Label>
-                <Select
-                  value={formData.campusId || undefined}
-                  onValueChange={(v) => {
-                    console.log("Campus selected:", v, "Type:", typeof v)
-                    setFormData((prev) => ({ ...prev, campusId: v }))
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="캠퍼스 선택" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {campuses.length === 0 ? (
-                      <SelectItem value="no-campus" disabled>캠퍼스가 없습니다</SelectItem>
-                    ) : (
-                      campuses.map((campus) => (
+                {formCampuses.length === 0 ? (
+                  <p className="text-sm text-amber-700 border rounded-md p-3 bg-amber-50">
+                    등록된 캠퍼스가 없습니다. <strong>캠퍼스/선생님</strong> 메뉴에서 캠퍼스를 먼저 추가한 뒤 새로고침 해 주세요.
+                  </p>
+                ) : (
+                  <Select
+                    value={formData.campusId || undefined}
+                    onValueChange={(v) => setFormData((prev) => ({ ...prev, campusId: v }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="캠퍼스 선택" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {formCampuses.map((campus) => (
                         <SelectItem key={campus.id} value={campus.id}>
                           {campus.name}
                         </SelectItem>
-                      ))
-                    )}
-                  </SelectContent>
-                </Select>
-                {formData.campusId && (
-                  <p className="text-xs text-muted-foreground mt-1">
-                    선택된 캠퍼스 ID: {formData.campusId}
-                  </p>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 )}
               </div>
               <div>
@@ -783,49 +832,40 @@ export function StudentManagement({
               </div>
               <div>
                 <Label>학년 *</Label>
-                <Select
-                  value={formData.gradeId || undefined}
-                  onValueChange={(v) => {
-                    console.log("Grade selected:", v, "Type:", typeof v)
-                    setFormData((prev) => ({ ...prev, gradeId: v }))
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="학년 선택" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {gradeCodes.length === 0 ? (
-                      <SelectItem value="no-grade" disabled>학년 코드가 없습니다</SelectItem>
-                    ) : (
-                      gradeCodes.map((code) => (
+                {formGradeCodes.length === 0 ? (
+                  <p className="text-sm text-amber-700 border rounded-md p-3 bg-amber-50">
+                    학년 코드가 없습니다. <strong>코드값 관리</strong>에서 학년(GRADE) 코드를 등록한 뒤 새로고침 해 주세요.
+                  </p>
+                ) : (
+                  <Select
+                    value={formData.gradeId || undefined}
+                    onValueChange={(v) => setFormData((prev) => ({ ...prev, gradeId: v }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="학년 선택" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {formGradeCodes.map((code) => (
                         <SelectItem key={code.id} value={code.id}>
                           {code.value}
                         </SelectItem>
-                      ))
-                    )}
-                  </SelectContent>
-                </Select>
-                {formData.gradeId && (
-                  <p className="text-xs text-muted-foreground mt-1">
-                    선택된 학년 ID: {formData.gradeId}
-                  </p>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 )}
               </div>
               <div>
                 <Label>레벨 (선택)</Label>
                 <Select
-                  value={formData.levelId || undefined}
-                  onValueChange={(v) => {
-                    console.log("Level selected:", v, "Type:", typeof v)
-                    setFormData((prev) => ({ ...prev, levelId: v }))
-                  }}
+                  value={formData.levelId && formData.levelId !== "" ? formData.levelId : "none"}
+                  onValueChange={(v) => setFormData((prev) => ({ ...prev, levelId: v === "none" ? "" : v }))}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="레벨 선택 (선택사항)" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">없음</SelectItem>
-                    {levelCodes.map((code) => (
+                    {formLevelCodes.map((code) => (
                       <SelectItem key={code.id} value={code.id}>
                         {code.value}
                       </SelectItem>
@@ -903,7 +943,12 @@ export function StudentManagement({
           <div>
             <Label>엑셀 파일 업로드</Label>
             <p className="text-sm text-muted-foreground mb-2">
-              컬럼 순서: campus, name, grade, level(optional), 숫자4자리, school(optional)
+              컬럼: <code className="text-xs">campus</code>/<strong>캠퍼스</strong>,{" "}
+              <code className="text-xs">name</code>/<strong>이름</strong>,{" "}
+              <code className="text-xs">grade</code>/<strong>학년</strong>,{" "}
+              <code className="text-xs">level</code>/<strong>레벨</strong>(선택),{" "}
+              <strong>숫자4자리</strong>, <code className="text-xs">school</code>/<strong>학교</strong>(선택).
+              값은 코드값·캠퍼스명과 <strong>정확히 일치</strong>해야 합니다.
             </p>
             <div className="flex gap-2">
               <Input
@@ -952,7 +997,7 @@ export function StudentManagement({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">전체</SelectItem>
-                  {campuses.map((campus) => (
+                  {formCampuses.map((campus) => (
                     <SelectItem key={campus.id} value={campus.id}>
                       {campus.name}
                     </SelectItem>
@@ -1006,7 +1051,7 @@ export function StudentManagement({
                       <SelectValue placeholder="학년 선택" />
                     </SelectTrigger>
                     <SelectContent>
-                      {gradeCodes.map((code) => (
+                      {formGradeCodes.map((code) => (
                         <SelectItem key={code.id} value={code.id}>
                           {code.value}
                         </SelectItem>
@@ -1023,7 +1068,7 @@ export function StudentManagement({
                       <SelectValue placeholder="레벨 선택" />
                     </SelectTrigger>
                     <SelectContent>
-                      {levelCodes.map((code) => (
+                      {formLevelCodes.map((code) => (
                         <SelectItem key={code.id} value={code.id}>
                           {code.value}
                         </SelectItem>
@@ -1058,10 +1103,18 @@ export function StudentManagement({
               <TableHeader>
                 <TableRow>
                   <TableHead>캠퍼스</TableHead>
-                  <TableHead>이름</TableHead>
+                  <TableHead>
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1"
+                      onClick={() => setNameSortOrder((prev) => (prev === "asc" ? "desc" : "asc"))}
+                      title={`이름 ${nameSortOrder === "asc" ? "오름차순" : "내림차순"} 정렬`}
+                    >
+                      이름 {nameSortOrder === "asc" ? "▲" : "▼"}
+                    </button>
+                  </TableHead>
                   <TableHead>숫자4자리</TableHead>
                   <TableHead>반명</TableHead>
-                  <TableHead>선생님</TableHead>
                   <TableHead>학년</TableHead>
                   <TableHead>레벨</TableHead>
                   <TableHead className="min-w-[7rem]">학교</TableHead>
@@ -1072,16 +1125,28 @@ export function StudentManagement({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredStudents.length === 0 ? (
+                {!hasSearched ? (
                   <TableRow>
-                    <TableCell colSpan={12} className="text-center text-muted-foreground">
+                    <TableCell colSpan={11} className="text-center text-muted-foreground">
+                      캠퍼스를 선택한 뒤 조회를 눌러주세요.
+                    </TableCell>
+                  </TableRow>
+                ) : isLoadingStudents ? (
+                  <TableRow>
+                    <TableCell colSpan={11} className="text-center text-muted-foreground">
+                      학생 목록을 불러오는 중입니다...
+                    </TableCell>
+                  </TableRow>
+                ) : filteredStudents.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={11} className="text-center text-muted-foreground">
                       {students.length === 0
                         ? "등록된 학생이 없습니다."
                         : "조건에 맞는 학생이 없습니다."}
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredStudents.map((student) => (
+                  sortedFilteredStudents.map((student) => (
                     <TableRow key={student.id}>
                       <TableCell className="whitespace-nowrap">{student.campus.name}</TableCell>
                       <TableCell className="whitespace-nowrap font-medium">{student.name}</TableCell>
@@ -1092,17 +1157,6 @@ export function StudentManagement({
                               new Set(
                                 student.studentClasses
                                   .map((sc) => sc.class?.name)
-                                  .filter(Boolean)
-                              )
-                            ).join(", ")
-                          : "-"}
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap max-w-[10rem]">
-                        {student.studentClasses && student.studentClasses.length > 0
-                          ? Array.from(
-                              new Set(
-                                student.studentClasses
-                                  .map((sc) => sc.class?.teacher?.name)
                                   .filter(Boolean)
                               )
                             ).join(", ")
@@ -1142,19 +1196,44 @@ export function StudentManagement({
                         </div>
                       </TableCell>
                       <TableCell className="whitespace-nowrap">
-                        {student.autoLoginToken ? (
+                        {student.hasAutoLoginLink ? (
                           <div className="flex items-center gap-1 shrink-0">
-                            <a
-                              href={`/s/auto/${student.autoLoginToken}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-blue-600 hover:underline text-xs"
-                            >
-                              링크
-                            </a>
+                            <span className="text-xs text-muted-foreground">발급됨</span>
                             <Button
                               variant="ghost"
                               size="sm"
+                              title="이 브라우저에서 최근 발급된 링크 복사"
+                              onClick={async () => {
+                                const cachedUrl = issuedAutoLoginUrls[student.id]
+                                if (!cachedUrl) {
+                                  toast({
+                                    title: "안내",
+                                    description:
+                                      "최근 발급 링크 정보가 없습니다. 재발급 후 복사해 주세요.",
+                                  })
+                                  return
+                                }
+                                try {
+                                  await navigator.clipboard.writeText(cachedUrl)
+                                  toast({
+                                    title: "복사 완료",
+                                    description: "기존(최근 발급) 자동로그인 링크가 복사되었습니다.",
+                                  })
+                                } catch {
+                                  toast({
+                                    title: "오류",
+                                    description: "클립보드 복사에 실패했습니다.",
+                                    variant: "destructive",
+                                  })
+                                }
+                              }}
+                            >
+                              <Copy className="h-3 w-3" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              title="새 링크 발급 후 클립보드에 복사"
                               onClick={async () => {
                                 try {
                                   const response = await fetch(
@@ -1166,9 +1245,18 @@ export function StudentManagement({
                                     }
                                   )
                                   if (response.ok) {
+                                    const data = await response.json()
+                                    if (data.token) {
+                                      const url = `${window.location.origin}/s/auto/${data.token}`
+                                      setIssuedAutoLoginUrls((prev) => ({
+                                        ...prev,
+                                        [student.id]: url,
+                                      }))
+                                      await navigator.clipboard.writeText(url)
+                                    }
                                     toast({
-                                      title: "성공",
-                                      description: "자동로그인 링크가 재생성되었습니다.",
+                                      title: "재발급 완료",
+                                      description: "새 자동로그인 링크가 클립보드에 복사되었습니다.",
                                     })
                                     router.refresh()
                                   }
@@ -1265,7 +1353,7 @@ export function StudentManagement({
                     <SelectValue placeholder="학년 선택" />
                   </SelectTrigger>
                   <SelectContent>
-                    {gradeCodes.map((code) => (
+                    {formGradeCodes.map((code) => (
                       <SelectItem key={code.id} value={code.id}>
                         {code.value}
                       </SelectItem>
@@ -1284,7 +1372,7 @@ export function StudentManagement({
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">없음</SelectItem>
-                    {levelCodes.map((code) => (
+                    {formLevelCodes.map((code) => (
                       <SelectItem key={code.id} value={code.id}>
                         {code.value}
                       </SelectItem>
