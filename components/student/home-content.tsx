@@ -107,6 +107,18 @@ export function StudentHomeContent({
   const SEARCH_CACHE_TTL_MS = 1000 * 60 * 20 // 20분 (세션 재개 시 불필요 네트워크 감소용)
   const { toast } = useToast()
 
+  // 테스트 완료 후 /student#student-calendar 로 올 때 캘린더 영역으로 스크롤
+  useEffect(() => {
+    const scrollToCalendar = () => {
+      if (typeof window === "undefined") return
+      if (window.location.hash !== "#student-calendar") return
+      document.getElementById("student-calendar")?.scrollIntoView({ behavior: "smooth", block: "start" })
+    }
+    scrollToCalendar()
+    window.addEventListener("hashchange", scrollToCalendar)
+    return () => window.removeEventListener("hashchange", scrollToCalendar)
+  }, [])
+
   const getAllowedLevelsForSemester = (semesterId: string) => {
     const mappedIds = semesterLevelMapBySemester[semesterId] || []
     // 매핑이 비어 있으면 기존 동작(전체 레벨)을 유지
@@ -293,7 +305,7 @@ export function StudentHomeContent({
   }, [isAddDialogOpen, selectedSemesterId, selectedLevelId, searchQuery])
 
   return (
-    <div className="relative mx-auto max-w-md px-4 py-4 pb-24 space-y-4">
+    <div id="student-calendar" className="relative mx-auto max-w-md px-4 py-4 pb-24 space-y-4">
       <div className="space-y-2">
         {/* 년월: 최상단 중앙 정렬 + 좌/우 월 이동 버튼 */}
         <div className="relative flex items-center justify-center min-h-[32px]">

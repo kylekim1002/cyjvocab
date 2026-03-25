@@ -6,6 +6,10 @@ const TOAST_LIMIT = 1
 /** 닫힌 토스트를 DOM에서 제거하기까지 (너무 길면 닫기 반응이 느리게 느껴질 수 있음) */
 const TOAST_REMOVE_DELAY = 400
 
+/** 기본 자동 닫힘 (점수 안내 등) — 수동으로만 닫히면 불필요한 레이아웃/갱신 체감이 커짐 */
+const DEFAULT_TOAST_DURATION_MS = 2000
+const DEFAULT_DESTRUCTIVE_TOAST_DURATION_MS = 6000
+
 type ToasterToast = ToastProps & {
   id: string
   title?: React.ReactNode
@@ -138,6 +142,13 @@ type Toast = Omit<ToasterToast, "id">
 function toast({ ...props }: Toast) {
   const id = genId()
 
+  const resolvedDuration =
+    props.duration !== undefined
+      ? props.duration
+      : props.variant === "destructive"
+        ? DEFAULT_DESTRUCTIVE_TOAST_DURATION_MS
+        : DEFAULT_TOAST_DURATION_MS
+
   const update = (props: ToasterToast) =>
     dispatch({
       type: "UPDATE_TOAST",
@@ -149,6 +160,7 @@ function toast({ ...props }: Toast) {
     type: "ADD_TOAST",
     toast: {
       ...props,
+      duration: resolvedDuration,
       id,
       open: true,
       onOpenChange: (open) => {

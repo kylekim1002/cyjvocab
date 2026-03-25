@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { useRouter } from "next/navigation"
 import { useToast } from "@/components/ui/use-toast"
 import { ArrowLeft, ArrowRight, Loader2, Volume2 } from "lucide-react"
@@ -60,9 +60,6 @@ export function LearningContent({
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [quizAnswers, setQuizAnswers] = useState<Record<string | number, number>>({})
-  const [showResultDialog, setShowResultDialog] = useState(false)
-  const [completedScore, setCompletedScore] = useState<number | null>(null)
-  const [completedAnswers, setCompletedAnswers] = useState<Record<string | number, number>>({})
   // 단어목록/암기학습용 상태
   const [wordlistMaxIndex, setWordlistMaxIndex] = useState<number>(-1)
   const [memorizeMaxIndex, setMemorizeMaxIndex] = useState<number>(-1)
@@ -75,6 +72,10 @@ export function LearningContent({
   const [showExitWaitOverlay, setShowExitWaitOverlay] = useState(false)
 
   const [showRestartConfirm, setShowRestartConfirm] = useState(false)
+  /** 다시보기(예) → 복습 진입 전 준비 로딩 */
+  const [showRestartPrepOverlay, setShowRestartPrepOverlay] = useState(false)
+  /** 테스트 제출 완료 후 캘린더(학생 홈)로 이동 전 로딩 */
+  const [showCalendarPrepOverlay, setShowCalendarPrepOverlay] = useState(false)
 
   // 쓰기학습용 상태 (스펠링 입력 + 기회 3회, 상단은 이모지로 표시)
   const [writingInput, setWritingInput] = useState<string>("")
@@ -253,7 +254,7 @@ export function LearningContent({
   }, [persistTestSessionSave])
 
   const handleExitToStudentHome = () => {
-    if (showExitWaitOverlay || showCompleteWaitOverlay) return
+    if (showExitWaitOverlay || showCompleteWaitOverlay || showCalendarPrepOverlay) return
     setShowExitWaitOverlay(true)
     try {
       router.push("/student")
@@ -340,7 +341,7 @@ export function LearningContent({
 
   const handleComplete = async () => {
     // 이미 완료 처리 중이면 무시
-    if (isCompleting) {
+    if (isCompleting || showCalendarPrepOverlay) {
       return
     }
 
@@ -456,30 +457,27 @@ export function LearningContent({
         throw new Error("응답을 파싱할 수 없습니다.")
       }
 
-      // 복습 모드가 아닐 때만 완료 처리
+      // 복습 모드가 아닐 때만 완료 처리 — 결과 팝업 없이 로딩 후 캘린더(학생 홈)로 이동
       if (!isReviewMode) {
         const score = data.score !== null && data.score !== undefined ? data.score : 0
-        setCompletedScore(score)
-        // 정규화된 quizAnswers를 저장 (서버에 보낸 것과 동일한 형태)
-        setCompletedAnswers(normalizedQuizAnswers)
-        setShowResultDialog(true)
-        
-        // 점수 표시 토스트
         toast({
           title: "테스트 완료",
           description: `점수: ${score}점`,
         })
+        setShowCalendarPrepOverlay(true)
+        window.setTimeout(() => {
+          router.push("/student#student-calendar")
+        }, 900)
       } else {
-        // 복습 모드에서는 점수만 저장하고 바로 홈으로
+        // 복습 모드: 토스트만 표시 후 캘린더로 이동 (닫기 X 전에도 2초 후 자동 닫힘). 불필요한 router.refresh 제거
         const score = data.score !== null && data.score !== undefined ? data.score : 0
         toast({
           title: "복습이 완료되었습니다.",
           description: `점수: ${score}점`,
         })
-        router.refresh()
-        setTimeout(() => {
-          router.push("/student")
-        }, 500)
+        window.setTimeout(() => {
+          router.push("/student#student-calendar")
+        }, 150)
       }
     } catch (error: any) {
       console.error("Complete error:", error)
@@ -517,7 +515,7 @@ export function LearningContent({
   )
 
   const handleNext = async () => {
-    if (isLoading || isCompleting) return
+    if (isLoading || isCompleting || showCalendarPrepOverlay) return
     const safeCurrentIndex = Math.max(0, Math.min(currentIndex, sortedItems.length - 1))
     
     // 테스트 단계에서는 답이 선택되었는지 확인
@@ -689,9 +687,9 @@ export function LearningContent({
         description: `${phaseLabel}${phaseParticle} 완료되었습니다.`,
       })
 
-      // 성공 시에는 로딩 상태를 유지한 채 즉시 캘린더(학생 홈)로 이동
+      // 성공 시에는 로딩 상태를 유지한 채 즉시 캘린더(학생 홈)로 이동 (push만으로 해당 라우트 RSC 로드)
       keepLoadingOnSuccess = true
-      router.push("/student")
+      router.push("/student#student-calendar")
     } catch (error: any) {
       console.error("Complete error:", error)
       toast({
@@ -884,12 +882,6 @@ export function LearningContent({
     )
   }
 
-  // 복습하기 핸들러
-  const handleRestart = () => {
-    // 복습 모드로 URL 변경하여 완료 상태를 우회하고 학습을 다시 시작
-    router.push(`/student/learn/${assignmentId}/${module.id}?phase=${phase}&review=true`)
-  }
-
   // 복습 모드가 아닐 때만 완료 체크
   // 해당 phase의 완료된 세션이 있는지 명확히 확인
   const isPhaseCompleted = (() => {
@@ -914,201 +906,72 @@ export function LearningContent({
   // 테스트만 완료 체크 (단어목록/암기학습은 제외)
   if (phase === "test" && isPhaseCompleted && !isReviewMode && !sessionId) {
     return (
-      <div className="container mx-auto p-4">
-        <Card>
-          <CardContent className="py-8 text-center space-y-4">
-            <h2 className="text-2xl font-bold mb-4">학습이 완료되었습니다.</h2>
-            <div className="flex flex-col gap-3 items-center">
-              <Button
-                onClick={() => setShowRestartConfirm(true)}
-                className="w-full max-w-xs"
-              >
-                다시보기
-              </Button>
-              <Button onClick={() => router.push("/student")} variant="outline" className="w-full max-w-xs">
-                닫기
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Dialog open={showRestartConfirm}>
-          <DialogContent className="max-w-md">
-            <DialogHeader>
-              <DialogTitle>다시보기</DialogTitle>
-              <DialogDescription>
-                시험점수가 초기화 됩니다.
-              </DialogDescription>
-            </DialogHeader>
-
-            <div className="flex gap-2 justify-end">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  setShowRestartConfirm(false)
-                  router.push("/student")
-                }}
-              >
-                아니요
-              </Button>
-              <Button
-                type="button"
-                onClick={() => {
-                  setShowRestartConfirm(false)
-                  router.push(`/student/learn/${assignmentId}/${module.id}?phase=${phase}&review=true`)
-                }}
-              >
-                예
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
-      </div>
-    )
-  }
-
-  // 정답 확인 함수
-  const getCorrectAnswer = (item: LearningItem) => {
-    return Number(item.payloadJson?.correct_index ?? -1) // 숫자로 변환
-  }
-
-  // 정오 확인 함수
-  const isCorrect = (itemIndex: number) => {
-    const correctIndex = getCorrectAnswer(module.items[itemIndex])
-    const studentAnswer = Number(completedAnswers[itemIndex] ?? -1) // 숫자로 변환
-    return studentAnswer === correctIndex
-  }
-
-  // NOTE:
-  // 결과 다이얼로그 계산은 Hook 순서 안정성을 위해 일반 계산으로 유지합니다.
-  // (중간 return이 많은 컴포넌트에서 하단 Hook(useMemo) 추가 시 React #310 위험)
-  const normalizedCompletedAnswers: Record<number, number> = {}
-  Object.keys(completedAnswers).forEach((key) => {
-    const numKey = Number(key)
-    if (!isNaN(numKey)) {
-      const numValue = Number(completedAnswers[key])
-      if (!isNaN(numValue)) {
-        normalizedCompletedAnswers[numKey] = numValue
-      }
-    }
-  })
-
-  const resultCards = showResultDialog
-    ? sortedItems.map((item, arrayIndex) => {
-        const correctIndex = Number(getCorrectAnswer(item))
-        const studentAnswer = normalizedCompletedAnswers[arrayIndex]
-        const isCorrectAnswer =
-          studentAnswer !== undefined &&
-          !isNaN(studentAnswer) &&
-          studentAnswer === correctIndex
-
-        const choices = [
-          item.payloadJson?.choice1,
-          item.payloadJson?.choice2,
-          item.payloadJson?.choice3,
-          item.payloadJson?.choice4,
-        ].filter(Boolean)
-
-        return (
-          <Card key={arrayIndex} className={isCorrectAnswer ? "border-green-500" : "border-red-500"}>
-            <CardContent className="p-4">
-              <div className="flex items-start justify-between mb-2">
-                <div className="flex-1">
-                  <p className="font-medium text-lg">
-                    {item.payloadJson?.word_text || `문항 ${arrayIndex + 1}`}
-                  </p>
-                  {module.type === "TYPE_B" && item.payloadJson?.image_url && (
-                    <img
-                      src={item.payloadJson.image_url}
-                      alt={item.payloadJson?.word_text || ""}
-                      className="max-w-full h-auto mt-2 rounded-lg"
-                      style={{ maxHeight: "200px" }}
-                      loading="lazy"
-                      decoding="async"
-                    />
-                  )}
-                </div>
-                <div className="ml-4">
-                  {isCorrectAnswer ? (
-                    <span className="text-green-600 font-bold text-lg">O</span>
-                  ) : (
-                    <span className="text-red-600 font-bold text-lg">X</span>
-                  )}
-                </div>
-              </div>
-              <div className="space-y-1 mt-3">
-                {choices.map((choice, choiceIdx) => {
-                  const isCorrectChoice = choiceIdx === correctIndex
-                  const isSelected = choiceIdx === studentAnswer
-                  return (
-                    <div
-                      key={choiceIdx}
-                      className={`p-2 rounded ${
-                        isCorrectChoice
-                          ? "bg-green-100 border border-green-500"
-                          : isSelected
-                          ? "bg-red-100 border border-red-500"
-                          : "bg-gray-50"
-                      }`}
-                    >
-                      {choiceIdx + 1}. {choice}
-                      {isCorrectChoice && (
-                        <span className="ml-2 text-green-600 font-bold">(정답)</span>
-                      )}
-                      {isSelected && !isCorrectChoice && (
-                        <span className="ml-2 text-red-600 font-bold">(선택한 답)</span>
-                      )}
-                    </div>
-                  )
-                })}
+      <>
+        {showRestartPrepOverlay ? (
+          <StudentWaitScreen
+            variant="overlay"
+            overlayZClass="z-[250]"
+            title="학습 준비 중이에요 🐝"
+            message="조금만 기다려 주세요. 곧 테스트 화면으로 들어갈게요!"
+          />
+        ) : null}
+        <div className="container mx-auto p-4">
+          <Card>
+            <CardContent className="py-8 text-center space-y-4">
+              <h2 className="text-2xl font-bold mb-4">학습이 완료되었습니다.</h2>
+              <div className="flex flex-col gap-3 items-center">
+                <Button
+                  onClick={() => setShowRestartConfirm(true)}
+                  className="w-full max-w-xs"
+                >
+                  다시보기
+                </Button>
+                <Button
+                  onClick={() => router.push("/student#student-calendar")}
+                  variant="outline"
+                  className="w-full max-w-xs"
+                >
+                  닫기
+                </Button>
               </div>
             </CardContent>
           </Card>
-        )
-      })
-    : null
+
+          <Dialog open={showRestartConfirm} onOpenChange={setShowRestartConfirm}>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>다시보기</DialogTitle>
+                <DialogDescription>시험점수가 초기화 됩니다.</DialogDescription>
+              </DialogHeader>
+
+              <div className="flex gap-2 justify-end">
+                <Button type="button" variant="outline" onClick={() => setShowRestartConfirm(false)}>
+                  아니요
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => {
+                    setShowRestartConfirm(false)
+                    setShowRestartPrepOverlay(true)
+                    window.setTimeout(() => {
+                      router.push(
+                        `/student/learn/${assignmentId}/${module.id}?phase=${phase}&review=true`
+                      )
+                    }, 450)
+                  }}
+                >
+                  예
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        </div>
+      </>
+    )
+  }
 
   return (
     <div className="container mx-auto p-4 space-y-4">
-      {/* 학습 결과 다이얼로그 */}
-      <Dialog open={showResultDialog} onOpenChange={(open) => {
-        setShowResultDialog(open)
-        // 다이얼로그를 닫으면 새 세션 시작 가능하도록 상태 초기화 및 홈으로 이동
-        if (!open) {
-          setSessionId(null)
-          // 다이얼로그가 닫히면 홈으로 자동 이동
-          setTimeout(() => {
-            router.push("/student")
-            router.refresh()
-          }, 100)
-        }
-      }}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>학습 결과</DialogTitle>
-            <DialogDescription>
-              {completedScore !== null && `점수: ${completedScore}점`}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            {resultCards}
-          </div>
-          <DialogFooter>
-            <Button onClick={() => {
-              setShowResultDialog(false)
-              // 다이얼로그 닫기 후 홈으로 자동 이동
-              setTimeout(() => {
-                router.push("/student")
-                router.refresh()
-              }, 100)
-            }}>
-              확인
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       <div className="flex gap-3 items-start justify-between">
         <div className="min-w-0 flex-1 pr-1">
           <h1 className="text-lg sm:text-2xl font-bold leading-snug break-words">
@@ -1132,7 +995,8 @@ export function LearningContent({
             isCheckingWriting ||
             isCompleting ||
             showCompleteWaitOverlay ||
-            showExitWaitOverlay
+            showExitWaitOverlay ||
+            showCalendarPrepOverlay
           }
           className="shrink-0 self-center"
         >
@@ -1466,10 +1330,20 @@ export function LearningContent({
                       <>
                         <Button 
                           onClick={() => handleComplete()} 
-                          disabled={isLoading || isCompleting || showCompleteWaitOverlay}
+                          disabled={
+                            isLoading ||
+                            isCompleting ||
+                            showCompleteWaitOverlay ||
+                            showCalendarPrepOverlay
+                          }
                           className={showRequired ? "bg-red-500 hover:bg-red-600 text-white" : ""}
                         >
-                          {showCompleteWaitOverlay ? (
+                          {showCalendarPrepOverlay ? (
+                            <span className="inline-flex items-center gap-2">
+                              <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
+                              캘린더로…
+                            </span>
+                          ) : showCompleteWaitOverlay ? (
                             <span className="inline-flex items-center gap-2">
                               <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
                               완료 중…
@@ -1545,15 +1419,23 @@ export function LearningContent({
         </CardContent>
       </Card>
 
-      {(showCompleteWaitOverlay || showExitWaitOverlay) && (
+      {(showCompleteWaitOverlay || showExitWaitOverlay || showCalendarPrepOverlay) && (
         <StudentWaitScreen
           variant="overlay"
           overlayZClass="z-[250]"
-          title={showExitWaitOverlay ? "홈으로 갈게요 🏠" : "거의 다 됐어요 ✨"}
+          title={
+            showExitWaitOverlay
+              ? "홈으로 갈게요 🏠"
+              : showCalendarPrepOverlay
+                ? "캘린더로 갈게요 📅"
+                : "거의 다 됐어요 ✨"
+          }
           message={
             showExitWaitOverlay
               ? "학습을 정리하고 있어요. 잠깐만!"
-              : "완료 내용을 저장하는 중이에요."
+              : showCalendarPrepOverlay
+                ? "잠깐만 기다려 주세요. 곧 배정 캘린더로 이동해요!"
+                : "완료 내용을 저장하는 중이에요."
           }
         />
       )}
