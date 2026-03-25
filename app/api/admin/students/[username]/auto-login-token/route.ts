@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth-options"
 import { prisma } from "@/lib/prisma"
+import { hashAutoLoginToken } from "@/lib/auto-login-token"
 import { generateAutoLoginToken } from "@/lib/utils"
 
 export async function POST(
@@ -33,13 +34,14 @@ export async function POST(
     }
 
     const token = generateAutoLoginToken()
+    const autoLoginTokenHash = hashAutoLoginToken(token)
     const expiresAt = new Date()
     expiresAt.setFullYear(expiresAt.getFullYear() + 1)
 
     await prisma.student.update({
       where: { id: student.id },
       data: {
-        autoLoginToken: token,
+        autoLoginTokenHash,
         autoLoginTokenExpiresAt: expiresAt,
       },
     })
