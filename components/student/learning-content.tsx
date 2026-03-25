@@ -106,6 +106,8 @@ export function LearningContent({
 
   const sessionIdRef = useRef(sessionId)
   sessionIdRef.current = sessionId
+  const currentIndexRef = useRef(currentIndex)
+  currentIndexRef.current = currentIndex
   const phaseRef = useRef(phase)
   phaseRef.current = phase
   const moduleTypeRef = useRef(module.type)
@@ -293,7 +295,18 @@ export function LearningContent({
       
       const data = await response.json()
       setSessionId(data.sessionId)
-      setQuizAnswers({})
+      // 세션 API가 늦게 끝나면 이 시점에 사용자가 이미 첫 문항을 고른 뒤일 수 있음.
+      // setQuizAnswers({})로 덮어쓰면 선택이 풀리거나, 다음 클릭 시 미선택으로 처리됨.
+      sessionIdRef.current = data.sessionId
+      setQuizAnswers((prev) => (Object.keys(prev).length > 0 ? prev : {}))
+      queueMicrotask(() => {
+        if (currentIndexRef.current < 0) return
+        const maxIdx = Math.max(0, sortedItems.length - 1)
+        const idx = Math.max(0, Math.min(currentIndexRef.current, maxIdx))
+        const qa = quizAnswersRef.current[idx]
+        if (qa === undefined || qa === null) return
+        persistTestSessionSave(idx)
+      })
     } catch (error: any) {
       console.error("Start session error:", error)
       toast({
