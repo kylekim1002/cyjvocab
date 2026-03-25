@@ -76,6 +76,8 @@ export function LearningContent({
   const [showRestartPrepOverlay, setShowRestartPrepOverlay] = useState(false)
   /** 테스트 제출 완료 후 캘린더(학생 홈)로 이동 전 로딩 */
   const [showCalendarPrepOverlay, setShowCalendarPrepOverlay] = useState(false)
+  /** 테스트 시작 시 첫 문제 진입 전에 숨은 로딩을 사용자에게 보이도록 타이밍 방어 */
+  const [testStartSplash, setTestStartSplash] = useState(false)
 
   // 쓰기학습용 상태 (스펠링 입력 + 기회 3회, 상단은 이모지로 표시)
   const [writingInput, setWritingInput] = useState<string>("")
@@ -122,6 +124,8 @@ export function LearningContent({
   const pendingProgressSaveIndexRef = useRef<number | null>(null)
   /** startNewSession 전용 락: 같은 틱에서 중복 호출 방지 */
   const startSessionLockRef = useRef(false)
+  /** startNewSession in-flight promise 공유 */
+  const startSessionPromiseRef = useRef<Promise<void> | null>(null)
 
   useEffect(() => {
     // 단어목록/암기학습/단어학습은 항상 처음부터 시작
@@ -276,48 +280,60 @@ export function LearningContent({
     return () => window.clearTimeout(t)
   }, [showExitWaitOverlay])
 
-  const startNewSession = async () => {
-      // 중복 effect/동시 호출로 인해 세션이 여러 번 만들어지는 것 방지
-      if (isLoading) return
-      if (startSessionLockRef.current) return
-      startSessionLockRef.current = true
-    setIsLoading(true)
-    try {
-      const response = await fetch(
-        `/api/student/assignments/${assignmentId}/modules/${module.id}/start`,
-        { method: "POST" }
-      )
-      
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({ error: "알 수 없는 오류" }))
-        throw new Error(error.error || "학습 시작에 실패했습니다.")
-      }
-      
-      const data = await response.json()
-      setSessionId(data.sessionId)
-      // 세션 API가 늦게 끝나면 이 시점에 사용자가 이미 첫 문항을 고른 뒤일 수 있음.
-      // setQuizAnswers({})로 덮어쓰면 선택이 풀리거나, 다음 클릭 시 미선택으로 처리됨.
-      sessionIdRef.current = data.sessionId
-      setQuizAnswers((prev) => (Object.keys(prev).length > 0 ? prev : {}))
-      queueMicrotask(() => {
-        if (currentIndexRef.current < 0) return
-        const maxIdx = Math.max(0, sortedItems.length - 1)
-        const idx = Math.max(0, Math.min(currentIndexRef.current, maxIdx))
-        const qa = quizAnswersRef.current[idx]
-        if (qa === undefined || qa === null) return
-        persistTestSessionSave(idx)
-      })
-    } catch (error: any) {
-      console.error("Start session error:", error)
-      toast({
-        title: "오류",
-        description: error.message || "학습 시작에 실패했습니다.",
-        variant: "destructive",
-      })
-    } finally {
-      setIsLoading(false)
-      startSessionLockRef.current = false
+  const startNewSession = async (): Promise<void> => {
+    // 이미 in-flight면 같은 promise를 공유해 대기
+    if (startSessionPromiseRef.current) {
+      return startSessionPromiseRef.current
     }
+
+    // 다른 로딩이 진행 중이면 신규 세션 시작을 막음
+    if (isLoading) return
+    if (startSessionLockRef.current) return
+
+    startSessionLockRef.current = true
+
+    const promise = (async () => {
+      setIsLoading(true)
+      try {
+        const response = await fetch(
+          `/api/student/assignments/${assignmentId}/modules/${module.id}/start`,
+          { method: "POST" }
+        )
+
+        if (!response.ok) {
+          const error = await response.json().catch(() => ({ error: "알 수 없는 오류" }))
+          throw new Error(error.error || "학습 시작에 실패했습니다.")
+        }
+
+        const data = await response.json()
+        setSessionId(data.sessionId)
+        sessionIdRef.current = data.sessionId
+        setQuizAnswers((prev) => (Object.keys(prev).length > 0 ? prev : {}))
+
+        queueMicrotask(() => {
+          if (currentIndexRef.current < 0) return
+          const maxIdx = Math.max(0, sortedItems.length - 1)
+          const idx = Math.max(0, Math.min(currentIndexRef.current, maxIdx))
+          const qa = quizAnswersRef.current[idx]
+          if (qa === undefined || qa === null) return
+          persistTestSessionSave(idx)
+        })
+      } catch (error: any) {
+        console.error("Start session error:", error)
+        toast({
+          title: "오류",
+          description: error.message || "학습 시작에 실패했습니다.",
+          variant: "destructive",
+        })
+      } finally {
+        setIsLoading(false)
+        startSessionLockRef.current = false
+        startSessionPromiseRef.current = null
+      }
+    })()
+
+    startSessionPromiseRef.current = promise
+    return promise
   }
 
   const handleSave = async () => {
@@ -859,15 +875,45 @@ export function LearningContent({
             <p className="text-lg text-muted-foreground">
               준비가 되셨으면 아래 버튼을 눌러 테스트를 시작하세요.
             </p>
+            {testStartSplash ? (
+              <p className="text-sm font-semibold text-muted-foreground">테스트 시작</p>
+            ) : null}
             <div className="flex justify-center mt-8">
               <Button 
-                onClick={() => {
+                disabled={
+                  isLoading ||
+                  isCompleting ||
+                  showCompleteWaitOverlay ||
+                  showExitWaitOverlay ||
+                  showCalendarPrepOverlay ||
+                  testStartSplash
+                }
+                onClick={async () => {
+                  if (isLoading || testStartSplash) return
+
+                  setTestStartSplash(true)
+                  const startedAt = Date.now()
+
+                  // 세션이 생성되기 전에 첫 문제로 넘어가면,
+                  // 사용자는 선택은 되는데 다음 버튼이 눌리지 않는 타이밍 이슈가 생길 수 있음.
+                  if (!sessionId) {
+                    await startNewSession()
+                  }
+
+                  // 최소 2초 동안은 "테스트 시작"이 보이도록 (사용자 인지성 강화)
+                  const elapsed = Date.now() - startedAt
+                  const waitMs = Math.max(0, 2000 - elapsed)
+                  if (waitMs > 0) {
+                    await new Promise((r) => window.setTimeout(r, waitMs))
+                  }
+
+                  setTestStartSplash(false)
                   setCurrentIndex(0)
                 }}
                 size="lg"
                 className="px-8 py-6 text-lg"
               >
-                다음
+                {isLoading || testStartSplash ? "테스트 시작" : "다음"}
                 <ArrowRight className="h-5 w-5 ml-2" />
               </Button>
             </div>
