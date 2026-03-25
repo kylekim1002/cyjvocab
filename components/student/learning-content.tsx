@@ -6,8 +6,10 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { useRouter } from "next/navigation"
 import { useToast } from "@/components/ui/use-toast"
-import { ArrowLeft, ArrowRight, Volume2 } from "lucide-react"
+import { ArrowLeft, ArrowRight, Loader2, Volume2 } from "lucide-react"
 import { playAudioFromPool, preloadAudioUrls } from "@/lib/student-learning"
+import { StudentWaitScreen } from "@/components/student/student-wait-screen"
+import { cn } from "@/lib/utils"
 
 interface LearningItem {
   id: string
@@ -67,21 +69,36 @@ export function LearningContent({
   const [showMeaning, setShowMeaning] = useState<boolean>(false) // 암기학습용 토글
   const [showAnswerRequired, setShowAnswerRequired] = useState<boolean>(false) // 답 선택 필수 경고
   const [isCompleting, setIsCompleting] = useState<boolean>(false) // 완료 처리 중 플래그 (중복 클릭 방지)
+  /** 완료 API/이동 처리 중 — 전체 화면 대기 오버레이 */
+  const [showCompleteWaitOverlay, setShowCompleteWaitOverlay] = useState(false)
+  /** 나가기 → 학생 홈 이동 전 — 전체 화면 대기 오버레이 */
+  const [showExitWaitOverlay, setShowExitWaitOverlay] = useState(false)
 
   const [showRestartConfirm, setShowRestartConfirm] = useState(false)
 
-  // 쓰기학습용 상태 (스펠링 입력 + 하트 3개)
+  // 쓰기학습용 상태 (스펠링 입력 + 기회 3회, 상단은 이모지로 표시)
   const [writingInput, setWritingInput] = useState<string>("")
   const [writingHearts, setWritingHearts] = useState<number>(3)
   const [writingWrongCount, setWritingWrongCount] = useState<number>(0)
   const [writingShowAnswer, setWritingShowAnswer] = useState<boolean>(false)
   const [isCheckingWriting, setIsCheckingWriting] = useState(false)
+  /** 쓰기학습 상단 이모지 시각 효과 (CSS만 — 오답 시에만 짧은 setTimeout) */
+  const [writingFaceFx, setWritingFaceFx] = useState<"none" | "bounce" | "shake">("none")
+  const writingFxTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   /** order 정렬 1회만 — 렌더마다 sort 반복 제거 */
   const sortedItems = useMemo(() => {
     if (!module.items || !Array.isArray(module.items) || module.items.length === 0) return []
     return [...module.items].sort((a, b) => a.order - b.order)
   }, [module.items])
+
+  /** 쓰기학습 상단 이모지 (Unicode만 사용 — 이미지·추가 라이브러리 없음, 렌더 비용 무시 가능) */
+  const writingMoodEmoji = useMemo(() => {
+    if (writingHearts >= 3) return "😊"
+    if (writingHearts === 2) return "😟"
+    if (writingHearts === 1) return "😢"
+    return "😭"
+  }, [writingHearts])
 
   const quizAnswersRef = useRef(quizAnswers)
   quizAnswersRef.current = quizAnswers
@@ -96,6 +113,12 @@ export function LearningContent({
   const testSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   /** 디바운스 대기 중인 테스트 저장 인덱스 (언마운트 시 flush) */
   const pendingTestSaveIndexRef = useRef<number | null>(null)
+  /** 단어학습/암기/쓰기 진행률 저장 디바운스 타이머 */
+  const progressSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  /** 디바운스 대기 중인 진행률 저장 인덱스 (언마운트 시 flush) */
+  const pendingProgressSaveIndexRef = useRef<number | null>(null)
+  /** startNewSession 전용 락: 같은 틱에서 중복 호출 방지 */
+  const startSessionLockRef = useRef(false)
 
   useEffect(() => {
     // 단어목록/암기학습/단어학습은 항상 처음부터 시작
@@ -164,7 +187,17 @@ export function LearningContent({
     setWritingHearts(3)
     setWritingWrongCount(0)
     setWritingShowAnswer(false)
+    setWritingFaceFx("bounce")
   }, [phase, currentIndex, module.id])
+
+  useEffect(() => {
+    return () => {
+      if (writingFxTimerRef.current) {
+        clearTimeout(writingFxTimerRef.current)
+        writingFxTimerRef.current = null
+      }
+    }
+  }, [])
 
   // 현재·다음 문항 음원 URL 프리로드 (듣기 클릭 체감 개선)
   useEffect(() => {
@@ -219,7 +252,32 @@ export function LearningContent({
     }
   }, [persistTestSessionSave])
 
+  const handleExitToStudentHome = () => {
+    if (showExitWaitOverlay || showCompleteWaitOverlay) return
+    setShowExitWaitOverlay(true)
+    try {
+      router.push("/student")
+    } catch {
+      setShowExitWaitOverlay(false)
+      toast({
+        title: "이동 실패",
+        description: "다시 시도해 주세요.",
+        variant: "destructive",
+      })
+    }
+  }
+
+  useEffect(() => {
+    if (!showExitWaitOverlay) return
+    const t = window.setTimeout(() => setShowExitWaitOverlay(false), 45_000)
+    return () => window.clearTimeout(t)
+  }, [showExitWaitOverlay])
+
   const startNewSession = async () => {
+      // 중복 effect/동시 호출로 인해 세션이 여러 번 만들어지는 것 방지
+      if (isLoading) return
+      if (startSessionLockRef.current) return
+      startSessionLockRef.current = true
     setIsLoading(true)
     try {
       const response = await fetch(
@@ -244,6 +302,7 @@ export function LearningContent({
       })
     } finally {
       setIsLoading(false)
+      startSessionLockRef.current = false
     }
   }
 
@@ -294,7 +353,7 @@ export function LearningContent({
       return
     }
 
-    // 테스트 단계에서는 마지막 문제의 답이 선택되었는지 확인
+    // 테스트 단계에서는 마지막 문제의 답이 선택되었는지 확인 (기존 1차 안전장치)
     if (phase === "test" && (module.type === "TYPE_A" || module.type === "TYPE_B")) {
       const safeCurrentIndex = Math.max(0, Math.min(currentIndex, sortedItems.length - 1))
       const numKey = Number(safeCurrentIndex)
@@ -311,7 +370,31 @@ export function LearningContent({
       }
     }
 
+    // 테스트 제출 직전 전체 문항 답안 여부 재검증 (2차 안전장치)
+    if (phase === "test" && (module.type === "TYPE_A" || module.type === "TYPE_B")) {
+      const missingIndexes: number[] = []
+      for (let i = 0; i < sortedItems.length; i++) {
+        const answered = quizAnswers[i] !== undefined && quizAnswers[i] !== null
+        if (!answered) missingIndexes.push(i)
+      }
+      if (missingIndexes.length > 0) {
+        const firstMissing = missingIndexes[0]
+        setCurrentIndex(firstMissing)
+        setShowAnswerRequired(true)
+        setTimeout(() => {
+          setShowAnswerRequired(false)
+        }, 3000)
+        toast({
+          title: "답안 선택 필요",
+          description: `선택하지 않은 문항이 있습니다. 문항 ${firstMissing + 1}의 답을 선택해주세요.`,
+          variant: "destructive",
+        })
+        return
+      }
+    }
+
     // 완료 처리 시작 - 즉시 플래그 설정하여 중복 클릭 방지
+    setShowCompleteWaitOverlay(true)
     setIsCompleting(true)
     setIsLoading(true)
 
@@ -408,6 +491,7 @@ export function LearningContent({
     } finally {
       setIsLoading(false)
       setIsCompleting(false)
+      setShowCompleteWaitOverlay(false)
     }
   }
 
@@ -433,6 +517,7 @@ export function LearningContent({
   )
 
   const handleNext = async () => {
+    if (isLoading || isCompleting) return
     const safeCurrentIndex = Math.max(0, Math.min(currentIndex, sortedItems.length - 1))
     
     // 테스트 단계에서는 답이 선택되었는지 확인
@@ -470,6 +555,7 @@ export function LearningContent({
   }
 
   const handlePrev = async () => {
+    if (isLoading || isCompleting) return
     const safeCurrentIndex = Math.max(0, Math.min(currentIndex, sortedItems.length - 1))
     if (safeCurrentIndex > 0) {
       const newIndex = safeCurrentIndex - 1
@@ -481,10 +567,13 @@ export function LearningContent({
     }
   }
 
-  // 진행률 업데이트 함수
-  const updateProgress = async (index: number) => {
+  // 진행률 업데이트 함수(실제 전송)
+  const sendProgressUpdate = useCallback(async (index: number) => {
     try {
-      const mode = phase === "memorization" ? "MEMORIZE" : "WORDLIST"
+      if (phase !== "wordlearning" && phase !== "memorization" && phase !== "writing") {
+        return
+      }
+      const mode = phase === "memorization" || phase === "writing" ? "MEMORIZE" : "WORDLIST"
       const response = await fetch("/api/student/progress/update", {
         method: "POST",
         headers: {
@@ -520,7 +609,36 @@ export function LearningContent({
         variant: "destructive",
       })
     }
-  }
+  }, [assignmentId, module.id, phase, sortedItems.length, toast])
+
+  // 진행률 업데이트 디바운스(연속 다음 클릭 시 요청 수 절감)
+  const updateProgress = useCallback((index: number) => {
+    if (phase !== "wordlearning" && phase !== "memorization" && phase !== "writing") return
+    pendingProgressSaveIndexRef.current = index
+    if (progressSaveTimerRef.current) clearTimeout(progressSaveTimerRef.current)
+    progressSaveTimerRef.current = setTimeout(() => {
+      progressSaveTimerRef.current = null
+      const pending = pendingProgressSaveIndexRef.current
+      pendingProgressSaveIndexRef.current = null
+      if (pending !== null) {
+        void sendProgressUpdate(pending)
+      }
+    }, 380)
+  }, [phase, sendProgressUpdate])
+
+  useEffect(() => {
+    return () => {
+      if (progressSaveTimerRef.current) {
+        clearTimeout(progressSaveTimerRef.current)
+        progressSaveTimerRef.current = null
+      }
+      const pending = pendingProgressSaveIndexRef.current
+      if (pending !== null) {
+        pendingProgressSaveIndexRef.current = null
+        void sendProgressUpdate(pending)
+      }
+    }
+  }, [sendProgressUpdate])
 
   // 단어목록/암기학습 완료 처리
   const handleWordlistMemorizeComplete = async () => {
@@ -528,7 +646,8 @@ export function LearningContent({
     if (isLoading) {
       return
     }
-    
+
+    setShowCompleteWaitOverlay(true)
     setIsLoading(true)
     let keepLoadingOnSuccess = false
     try {
@@ -556,17 +675,18 @@ export function LearningContent({
 
       await response.json()
       
+      const phaseLabel =
+        phase === "wordlearning"
+          ? "단어학습"
+          : phase === "wordlist"
+          ? "단어목록"
+          : phase === "writing"
+          ? "쓰기학습"
+          : "플래시카드"
+      const phaseParticle = phaseLabel === "플래시카드" ? "가" : "이"
       toast({
         title: "완료",
-        description: `${
-          phase === "wordlearning"
-            ? "단어학습"
-            : phase === "wordlist"
-            ? "단어목록"
-            : phase === "writing"
-            ? "쓰기학습"
-            : "플래시카드"
-        }이 완료되었습니다.`,
+        description: `${phaseLabel}${phaseParticle} 완료되었습니다.`,
       })
 
       // 성공 시에는 로딩 상태를 유지한 채 즉시 캘린더(학생 홈)로 이동
@@ -582,6 +702,7 @@ export function LearningContent({
     } finally {
       if (!keepLoadingOnSuccess) {
         setIsLoading(false)
+        setShowCompleteWaitOverlay(false)
       }
     }
   }
@@ -637,7 +758,7 @@ export function LearningContent({
 
     setIsCheckingWriting(true)
     try {
-      // 쓰기학습: "답"은 뜻(정답 의미), "문제"는 스펠링으로 뒤집어서 처리
+      // 쓰기학습: 화면에는 단어(스펠링), 입력·채점은 뜻(정답 의미) — 서로 반대로 둠
       const expected = getCorrectMeaning(writingItem)
       const typed = normalizeText(writingInput)
       const normalizedExpected = normalizeText(expected)
@@ -647,10 +768,15 @@ export function LearningContent({
         // 다음 문제로 이동
         const newIndex = safeIdx + 1
         if (safeIdx < sortedItems.length - 1) {
+          if (writingFxTimerRef.current) {
+            clearTimeout(writingFxTimerRef.current)
+            writingFxTimerRef.current = null
+          }
           setWritingInput("")
           setWritingWrongCount(0)
           setWritingHearts(3)
           setWritingShowAnswer(false)
+          setWritingFaceFx("bounce")
 
           setCurrentIndex(newIndex)
           void updateProgress(newIndex)
@@ -667,15 +793,25 @@ export function LearningContent({
         setWritingWrongCount(nextWrongCount)
         setWritingHearts((prev) => Math.max(0, prev - 1))
 
+        if (writingFxTimerRef.current) {
+          clearTimeout(writingFxTimerRef.current)
+          writingFxTimerRef.current = null
+        }
+        setWritingFaceFx("shake")
+        writingFxTimerRef.current = setTimeout(() => {
+          setWritingFaceFx("none")
+          writingFxTimerRef.current = null
+        }, 520)
+
         if (nextWrongCount >= 3) {
           setWritingShowAnswer(true)
           setWritingInput("")
         }
       } else {
-        // 정답을 이미 보여준 상태: 틀리면 그대로 재작성 대기
+        // 정답(뜻)을 이미 보여준 상태: 틀리면 그대로 재작성 대기
         toast({
           title: "다시 작성하세요",
-          description: "정답을 다시 확인한 뒤 스펠링을 입력해주세요.",
+          description: "정답을 다시 확인한 뒤 뜻을 입력해주세요.",
           variant: "destructive",
         })
       }
@@ -844,6 +980,95 @@ export function LearningContent({
     return studentAnswer === correctIndex
   }
 
+  // NOTE:
+  // 결과 다이얼로그 계산은 Hook 순서 안정성을 위해 일반 계산으로 유지합니다.
+  // (중간 return이 많은 컴포넌트에서 하단 Hook(useMemo) 추가 시 React #310 위험)
+  const normalizedCompletedAnswers: Record<number, number> = {}
+  Object.keys(completedAnswers).forEach((key) => {
+    const numKey = Number(key)
+    if (!isNaN(numKey)) {
+      const numValue = Number(completedAnswers[key])
+      if (!isNaN(numValue)) {
+        normalizedCompletedAnswers[numKey] = numValue
+      }
+    }
+  })
+
+  const resultCards = showResultDialog
+    ? sortedItems.map((item, arrayIndex) => {
+        const correctIndex = Number(getCorrectAnswer(item))
+        const studentAnswer = normalizedCompletedAnswers[arrayIndex]
+        const isCorrectAnswer =
+          studentAnswer !== undefined &&
+          !isNaN(studentAnswer) &&
+          studentAnswer === correctIndex
+
+        const choices = [
+          item.payloadJson?.choice1,
+          item.payloadJson?.choice2,
+          item.payloadJson?.choice3,
+          item.payloadJson?.choice4,
+        ].filter(Boolean)
+
+        return (
+          <Card key={arrayIndex} className={isCorrectAnswer ? "border-green-500" : "border-red-500"}>
+            <CardContent className="p-4">
+              <div className="flex items-start justify-between mb-2">
+                <div className="flex-1">
+                  <p className="font-medium text-lg">
+                    {item.payloadJson?.word_text || `문항 ${arrayIndex + 1}`}
+                  </p>
+                  {module.type === "TYPE_B" && item.payloadJson?.image_url && (
+                    <img
+                      src={item.payloadJson.image_url}
+                      alt={item.payloadJson?.word_text || ""}
+                      className="max-w-full h-auto mt-2 rounded-lg"
+                      style={{ maxHeight: "200px" }}
+                      loading="lazy"
+                      decoding="async"
+                    />
+                  )}
+                </div>
+                <div className="ml-4">
+                  {isCorrectAnswer ? (
+                    <span className="text-green-600 font-bold text-lg">O</span>
+                  ) : (
+                    <span className="text-red-600 font-bold text-lg">X</span>
+                  )}
+                </div>
+              </div>
+              <div className="space-y-1 mt-3">
+                {choices.map((choice, choiceIdx) => {
+                  const isCorrectChoice = choiceIdx === correctIndex
+                  const isSelected = choiceIdx === studentAnswer
+                  return (
+                    <div
+                      key={choiceIdx}
+                      className={`p-2 rounded ${
+                        isCorrectChoice
+                          ? "bg-green-100 border border-green-500"
+                          : isSelected
+                          ? "bg-red-100 border border-red-500"
+                          : "bg-gray-50"
+                      }`}
+                    >
+                      {choiceIdx + 1}. {choice}
+                      {isCorrectChoice && (
+                        <span className="ml-2 text-green-600 font-bold">(정답)</span>
+                      )}
+                      {isSelected && !isCorrectChoice && (
+                        <span className="ml-2 text-red-600 font-bold">(선택한 답)</span>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        )
+      })
+    : null
+
   return (
     <div className="container mx-auto p-4 space-y-4">
       {/* 학습 결과 다이얼로그 */}
@@ -867,83 +1092,7 @@ export function LearningContent({
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            {/* completedAnswers 정규화 (한 번만 실행) */}
-            {(() => {
-              const normalizedCompletedAnswers: Record<number, number> = {}
-              Object.keys(completedAnswers).forEach((key) => {
-                const numKey = Number(key)
-                if (!isNaN(numKey)) {
-                  const numValue = Number(completedAnswers[key])
-                  if (!isNaN(numValue)) {
-                    normalizedCompletedAnswers[numKey] = numValue
-                  }
-                }
-              })
-
-              return sortedItems.map((item, arrayIndex) => {
-                const correctIndex = Number(getCorrectAnswer(item)) // 숫자로 변환
-                const studentAnswer = normalizedCompletedAnswers[arrayIndex]
-                const isCorrectAnswer = studentAnswer !== undefined && !isNaN(studentAnswer) && studentAnswer === correctIndex
-                
-              const choices = [
-                item.payloadJson?.choice1,
-                item.payloadJson?.choice2,
-                item.payloadJson?.choice3,
-                item.payloadJson?.choice4,
-              ].filter(Boolean)
-
-              return (
-                <Card key={arrayIndex} className={isCorrectAnswer ? "border-green-500" : "border-red-500"}>
-                  <CardContent className="p-4">
-                    <div className="flex items-start justify-between mb-2">
-                      <div className="flex-1">
-                        <p className="font-medium text-lg">{item.payloadJson?.word_text || `문항 ${arrayIndex + 1}`}</p>
-                        {module.type === "TYPE_B" && item.payloadJson?.image_url && (
-                          <img
-                            src={item.payloadJson.image_url}
-                            alt={item.payloadJson?.word_text || ""}
-                            className="max-w-full h-auto mt-2 rounded-lg"
-                            style={{ maxHeight: "200px" }}
-                            loading="lazy"
-                            decoding="async"
-                          />
-                        )}
-                      </div>
-                      <div className="ml-4">
-                        {isCorrectAnswer ? (
-                          <span className="text-green-600 font-bold text-lg">O</span>
-                        ) : (
-                          <span className="text-red-600 font-bold text-lg">X</span>
-                        )}
-                      </div>
-                    </div>
-                    <div className="space-y-1 mt-3">
-                      {choices.map((choice, choiceIdx) => {
-                        const isCorrect = choiceIdx === correctIndex
-                        const isSelected = choiceIdx === studentAnswer
-                        return (
-                          <div
-                            key={choiceIdx}
-                            className={`p-2 rounded ${
-                              isCorrect
-                                ? "bg-green-100 border border-green-500"
-                                : isSelected
-                                ? "bg-red-100 border border-red-500"
-                                : "bg-gray-50"
-                            }`}
-                          >
-                            {choiceIdx + 1}. {choice}
-                            {isCorrect && <span className="ml-2 text-green-600 font-bold">(정답)</span>}
-                            {isSelected && !isCorrect && <span className="ml-2 text-red-600 font-bold">(선택한 답)</span>}
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </CardContent>
-                </Card>
-              )
-              })
-            })()}
+            {resultCards}
           </div>
           <DialogFooter>
             <Button onClick={() => {
@@ -976,11 +1125,25 @@ export function LearningContent({
         </div>
         <Button
           variant="outline"
-          onClick={() => router.push("/student")}
-          disabled={isLoading || isCheckingWriting || isCompleting}
+          type="button"
+          onClick={handleExitToStudentHome}
+          disabled={
+            isLoading ||
+            isCheckingWriting ||
+            isCompleting ||
+            showCompleteWaitOverlay ||
+            showExitWaitOverlay
+          }
           className="shrink-0 self-center"
         >
-          나가기
+          {showExitWaitOverlay ? (
+            <span className="inline-flex items-center gap-2">
+              <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
+              잠깐만…
+            </span>
+          ) : (
+            "나가기"
+          )}
         </Button>
       </div>
 
@@ -1045,10 +1208,10 @@ export function LearningContent({
                     />
                   </div>
                 )}
-                <p className="text-4xl font-bold mb-6">
+                <p className="text-3xl font-bold text-muted-foreground mb-6">
                   {currentItem.payloadJson?.word_text || ""}
                 </p>
-                <p className="text-2xl text-muted-foreground mb-6">
+                <p className="text-3xl font-bold text-black mb-6">
                   {getCorrectMeaning(currentItem)}
                 </p>
                 <div className="flex justify-center gap-4">
@@ -1098,27 +1261,43 @@ export function LearningContent({
               </div>
             </div>
           ) : phase === "writing" ? (
-            // 쓰기학습 단계: 스펠링 입력 + 하트 3개
+            // 쓰기학습 단계: 스펠링 입력 + 기회 3회 (상단 스마일 → 오답 시 우는 표정)
             <div className="space-y-4">
-              <div className="flex justify-center gap-1 text-2xl">
-                {Array.from({ length: 3 }).map((_, i) => {
-                  const filled = i < writingHearts
-                  return (
-                    <span
-                      key={i}
-                      className={filled ? "text-red-500" : "text-gray-300"}
-                    >
-                      ♥
-                    </span>
-                  )
-                })}
+              <div
+                className="flex justify-center select-none"
+                role="img"
+                aria-label={`쓰기 학습 남은 기회 ${writingHearts}회`}
+              >
+                <span
+                  key={currentIndex}
+                  className={cn(
+                    "text-5xl leading-none inline-block will-change-transform",
+                    "motion-reduce:animate-none motion-reduce:will-change-auto",
+                    writingFaceFx === "shake" && "animate-writing-wrong-shake",
+                    writingFaceFx === "bounce" && "animate-writing-happy-pop"
+                  )}
+                  title={writingHearts >= 3 ? "화이팅!" : "오답이에요"}
+                >
+                  {writingMoodEmoji}
+                </span>
               </div>
 
               <div className="text-center py-8">
-                {/* writing은 word를 숨기고, 뜻을 보고 스펠링을 입력 */}
-                  {/* 문제: 스펠링 */}
-                  <p className="text-3xl font-bold mb-2">{getExpectedSpelling(currentItem)}</p>
-                  <p className="text-sm text-muted-foreground mb-6">뜻을 입력하고 “다음”을 누르세요.</p>
+                {/* 쓰기학습: 단어(스펠링)를 보여주고 뜻을 타이핑 — 정답(채점)과 표시가 반대 */}
+                <p className="text-3xl font-bold mb-3">{getExpectedSpelling(currentItem)}</p>
+                <div className="flex justify-center mb-4">
+                  <Button
+                    type="button"
+                    onClick={() => handlePlaySound()}
+                    variant="outline"
+                    size="lg"
+                    disabled={isLoading || isCheckingWriting}
+                  >
+                    <Volume2 className="h-5 w-5 mr-2" />
+                    음성
+                  </Button>
+                </div>
+                <p className="text-sm text-muted-foreground mb-6">뜻을 입력하고 “다음”을 누르세요.</p>
 
                 {writingShowAnswer && (
                   <div className="space-y-2 mb-6">
@@ -1133,7 +1312,7 @@ export function LearningContent({
                     value={writingInput}
                     onChange={(e) => setWritingInput(e.target.value)}
                     disabled={isLoading || isCheckingWriting}
-                    placeholder={writingShowAnswer ? "정답을 보고 다시 작성" : "예: 사과"}
+                    placeholder={writingShowAnswer ? "정답을 보고 다시 작성" : "예: apple"}
                     className="w-full border rounded-lg px-3 py-2 text-base"
                   />
 
@@ -1287,10 +1466,17 @@ export function LearningContent({
                       <>
                         <Button 
                           onClick={() => handleComplete()} 
-                          disabled={isLoading || isCompleting}
+                          disabled={isLoading || isCompleting || showCompleteWaitOverlay}
                           className={showRequired ? "bg-red-500 hover:bg-red-600 text-white" : ""}
                         >
-                          {isLoading || isCompleting ? "처리 중..." : "완료"}
+                          {showCompleteWaitOverlay ? (
+                            <span className="inline-flex items-center gap-2">
+                              <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
+                              완료 중…
+                            </span>
+                          ) : (
+                            "완료"
+                          )}
                         </Button>
                         {showRequired && (
                           <span className="text-xs text-red-500">답을 선택하세요</span>
@@ -1302,9 +1488,16 @@ export function LearningContent({
               ) : (
                 <Button 
                   onClick={handleWordlistMemorizeComplete}
-                  disabled={isLoading}
+                  disabled={isLoading || showCompleteWaitOverlay}
                 >
-                  {isLoading ? "처리 중..." : "완료"}
+                  {showCompleteWaitOverlay ? (
+                    <span className="inline-flex items-center gap-2">
+                      <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
+                      완료 중…
+                    </span>
+                  ) : (
+                    "완료"
+                  )}
                 </Button>
               )
             ) : (
@@ -1351,6 +1544,19 @@ export function LearningContent({
           )}
         </CardContent>
       </Card>
+
+      {(showCompleteWaitOverlay || showExitWaitOverlay) && (
+        <StudentWaitScreen
+          variant="overlay"
+          overlayZClass="z-[250]"
+          title={showExitWaitOverlay ? "홈으로 갈게요 🏠" : "거의 다 됐어요 ✨"}
+          message={
+            showExitWaitOverlay
+              ? "학습을 정리하고 있어요. 잠깐만!"
+              : "완료 내용을 저장하는 중이에요."
+          }
+        />
+      )}
     </div>
   )
 }

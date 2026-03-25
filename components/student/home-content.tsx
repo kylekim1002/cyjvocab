@@ -1,21 +1,22 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react"
-import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { ChevronLeft, ChevronRight, RefreshCw } from "lucide-react"
+import { ChevronLeft, ChevronRight, Loader2, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useToast } from "@/components/ui/use-toast"
+import { StudentWaitScreen } from "@/components/student/student-wait-screen"
 
 interface Assignment {
   id: string
   assignedDate: Date | string
   modules: Array<{
     id: string
+    assignmentId?: string
     module: {
       id: string
       title: string
@@ -35,6 +36,7 @@ interface StudentHomeContentProps {
   assignments: Assignment[]
   semesterCodes: Array<{ id: string; value: string }>
   levelCodes: Array<{ id: string; value: string }>
+  semesterLevelMapBySemester?: Record<string, string[]>
 }
 
 type Phase = "wordlist" | "wordlearning" | "memorization" | "writing" | "test"
@@ -77,6 +79,7 @@ export function StudentHomeContent({
   assignments: initialAssignments,
   semesterCodes,
   levelCodes,
+  semesterLevelMapBySemester = {},
 }: StudentHomeContentProps) {
   const [selectedPhase, setSelectedPhase] = useState<Phase>("wordlist")
   const [monthCursor, setMonthCursor] = useState(() => {
@@ -96,10 +99,44 @@ export function StudentHomeContent({
   const [isSearching, setIsSearching] = useState(false)
   const [isAssigning, setIsAssigning] = useState(false)
   const [isRefreshPending, startRefreshTransition] = useTransition()
+  /** 학습 시작 클릭 후 다음 화면 도착 전까지 중복 클릭 방지 + WAIT 오버레이 */
+  const [pendingLearnKey, setPendingLearnKey] = useState<string | null>(null)
   const moduleSearchCache = useRef<Map<string, Array<{ id: string; title: string; type: string }>>>(
     new Map()
   )
+  const SEARCH_CACHE_TTL_MS = 1000 * 60 * 20 // 20분 (세션 재개 시 불필요 네트워크 감소용)
   const { toast } = useToast()
+
+  const getAllowedLevelsForSemester = (semesterId: string) => {
+    const mappedIds = semesterLevelMapBySemester[semesterId] || []
+    // 매핑이 비어 있으면 기존 동작(전체 레벨)을 유지
+    if (mappedIds.length === 0) return levelCodes
+    return levelCodes.filter((level) => mappedIds.includes(level.id))
+  }
+
+  const startLearning = (assignmentId: string, moduleId: string) => {
+    if (pendingLearnKey) return
+    const key = `${assignmentId}::${moduleId}`
+    setPendingLearnKey(key)
+    const href = `/student/learn/${assignmentId}/${moduleId}?phase=${selectedPhase}`
+    try {
+      router.push(href)
+    } catch {
+      setPendingLearnKey(null)
+      toast({
+        title: "이동 실패",
+        description: "다시 시도해 주세요.",
+        variant: "destructive",
+      })
+    }
+  }
+
+  // 푸시만 하고 화면 전환이 안 되는 경우(드물게) 오버레이가 영구 고정되지 않도록
+  useEffect(() => {
+    if (!pendingLearnKey) return
+    const t = window.setTimeout(() => setPendingLearnKey(null), 45_000)
+    return () => window.clearTimeout(t)
+  }, [pendingLearnKey])
 
   const assignments = useMemo(
     () =>
@@ -137,17 +174,52 @@ export function StudentHomeContent({
 
   const selectedAssignments = selectedDateKey ? dateAssignmentsMap.get(selectedDateKey) || [] : []
 
+  // 날짜·탭 선택 후 보이는 학습 링크를 미리 로드 → 「시작」 클릭 시 전환 체감 개선
+  useEffect(() => {
+    if (!selectedDateKey || selectedAssignments.length === 0) return
+    // 탭(selectedPhase)만 바뀌는 경우에도 프리페치가 반복되는 것을 방지.
+    // phase가 포함된 프리페치는 "달력에서 날짜가 확정됐을 때"만 1회 수행하는 편이 부하가 적습니다.
+    let count = 0
+    for (const assignment of selectedAssignments) {
+      for (const mod of assignment.modules) {
+        const href = `/student/learn/${assignment.id}/${mod.module.id}?phase=${selectedPhase}`
+        router.prefetch(href)
+        count++
+        // 모듈 수가 많을 때 prefetch 폭주를 막기 위한 상한
+        if (count >= 6) return
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedDateKey, selectedAssignments, router])
+
   // 다이얼로그 열릴 때 기본값 세팅
   useEffect(() => {
     if (!isAddDialogOpen) return
     // 목록이 로딩되거나 값이 바뀌는 상황에서도 검색이 비지 않도록,
     // 다이얼로그를 열 때마다 현재 데이터의 첫 항목으로 초기화합니다.
     setSelectedSemesterId(semesterCodes[0]?.id || "")
-    setSelectedLevelId(levelCodes[0]?.id || "")
+    const firstSemesterId = semesterCodes[0]?.id || ""
+    const allowedLevels = firstSemesterId ? getAllowedLevelsForSemester(firstSemesterId) : levelCodes
+    setSelectedLevelId(allowedLevels[0]?.id || "")
     setSearchQuery("")
     setSelectedModuleId("")
     setModuleResults([])
-  }, [isAddDialogOpen, semesterCodes, levelCodes])
+  }, [isAddDialogOpen, semesterCodes, levelCodes, semesterLevelMapBySemester])
+
+  // 학기 변경 시 허용 레벨 목록을 다시 맞춤
+  useEffect(() => {
+    if (!isAddDialogOpen) return
+    if (!selectedSemesterId) return
+    const allowedLevels = getAllowedLevelsForSemester(selectedSemesterId)
+    if (allowedLevels.length === 0) {
+      setSelectedLevelId("")
+      return
+    }
+    const stillValid = allowedLevels.some((l) => l.id === selectedLevelId)
+    if (!stillValid) {
+      setSelectedLevelId(allowedLevels[0].id)
+    }
+  }, [isAddDialogOpen, selectedSemesterId, selectedLevelId, levelCodes, semesterLevelMapBySemester])
 
   // 검색(학기/레벨/제목) 결과 조회
   useEffect(() => {
@@ -155,6 +227,23 @@ export function StudentHomeContent({
     if (!selectedSemesterId || !selectedLevelId) return
 
     const cacheKey = `${selectedSemesterId}:${selectedLevelId}:${searchQuery.trim().toLowerCase()}`
+
+    // sessionStorage 캐시를 먼저 확인 (탭/다이얼로그 전환/페이지 이동 시에도 재사용)
+    try {
+      const storageKey = `studentModuleSearch:${cacheKey}`
+      const cachedRaw = window.sessionStorage.getItem(storageKey)
+      if (cachedRaw) {
+        const parsed = JSON.parse(cachedRaw) as { ts: number; result: Array<{ id: string; title: string; type: string }> }
+        if (parsed?.ts && Date.now() - parsed.ts <= SEARCH_CACHE_TTL_MS && Array.isArray(parsed.result)) {
+          setModuleResults(parsed.result)
+          setIsSearching(false)
+          return
+        }
+      }
+    } catch {
+      // storage 접근 불가/JSON 파싱 실패는 무시하고 서버 요청 진행
+    }
+
     if (moduleSearchCache.current.has(cacheKey)) {
       setModuleResults(moduleSearchCache.current.get(cacheKey) || [])
       setIsSearching(false)
@@ -176,6 +265,16 @@ export function StudentHomeContent({
         const normalized = Array.isArray(data) ? data : []
         moduleSearchCache.current.set(cacheKey, normalized)
         setModuleResults(normalized)
+        // sessionStorage에도 기록
+        try {
+          const storageKey = `studentModuleSearch:${cacheKey}`
+          window.sessionStorage.setItem(
+            storageKey,
+            JSON.stringify({ ts: Date.now(), result: normalized })
+          )
+        } catch {
+          // ignore
+        }
       } catch {
         if (!controller.signal.aborted) {
           setModuleResults([])
@@ -194,7 +293,7 @@ export function StudentHomeContent({
   }, [isAddDialogOpen, selectedSemesterId, selectedLevelId, searchQuery])
 
   return (
-    <div className="mx-auto max-w-md px-4 py-4 pb-24 space-y-4">
+    <div className="relative mx-auto max-w-md px-4 py-4 pb-24 space-y-4">
       <div className="space-y-2">
         {/* 년월: 최상단 중앙 정렬 + 좌/우 월 이동 버튼 */}
         <div className="relative flex items-center justify-center min-h-[32px]">
@@ -326,9 +425,27 @@ export function StudentHomeContent({
                         {mod.source === "STUDENT" ? "학생" : "선생님"}
                       </span>
                     </div>
-                    <Link href={`/student/learn/${assignment.id}/${mod.module.id}?phase=${selectedPhase}`}>
-                      <Button className="w-full">시작</Button>
-                    </Link>
+                    <Button
+                      type="button"
+                      className="w-full"
+                      disabled={pendingLearnKey !== null}
+                      onPointerEnter={() => {
+                        const targetAssignmentId = mod.assignmentId || assignment.id
+                        router.prefetch(
+                          `/student/learn/${targetAssignmentId}/${mod.module.id}?phase=${selectedPhase}`
+                        )
+                      }}
+                      onClick={() => startLearning(mod.assignmentId || assignment.id, mod.module.id)}
+                    >
+                      {pendingLearnKey === `${mod.assignmentId || assignment.id}::${mod.module.id}` ? (
+                        <span className="inline-flex items-center justify-center gap-2">
+                          <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
+                          가는 중…
+                        </span>
+                      ) : (
+                        "시작"
+                      )}
+                    </Button>
                   </div>
                 ))
               )}
@@ -375,7 +492,7 @@ export function StudentHomeContent({
                   <SelectValue placeholder="레벨 선택" />
                 </SelectTrigger>
                 <SelectContent>
-                  {levelCodes.map((c) => (
+                  {(selectedSemesterId ? getAllowedLevelsForSemester(selectedSemesterId) : levelCodes).map((c) => (
                     <SelectItem key={c.id} value={c.id}>
                       {c.value}
                     </SelectItem>
@@ -471,6 +588,14 @@ export function StudentHomeContent({
           </div>
         </DialogContent>
       </Dialog>
+
+      {pendingLearnKey && (
+        <StudentWaitScreen
+          variant="overlay"
+          title="학습으로 갈게요 ✨"
+          message="다음 화면을 불러오는 중이에요. 버튼은 한 번만 눌러 주세요."
+        />
+      )}
     </div>
   )
 }
