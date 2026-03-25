@@ -115,6 +115,7 @@ export const config = {
   matcher: [
     '/admin/:path*',
     '/admin-login',
+    '/student',
     '/student/:path*',
     '/login',
     '/admin/login',

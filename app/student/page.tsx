@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth-options"
 import { prisma } from "@/lib/prisma"
@@ -6,17 +7,22 @@ import { Card, CardContent } from "@/components/ui/card"
 import { getSemesterLevelMapRows, groupSemesterLevelMappings } from "@/lib/semester-level-map"
 import { getSemesterStatusRows, toSemesterStatusMap } from "@/lib/semester-status"
 
+/** RSC → 클라이언트 전달 시 Date 등 직렬화 보장 (비정상 값으로 인한 refresh 시 오류 방지) */
+function toClientAssignments<T>(data: T): T {
+  return JSON.parse(JSON.stringify(data)) as T
+}
+
 export default async function StudentHomePage() {
+  const session = await getServerSession(authOptions)
+  if (!session?.user?.studentId) {
+    redirect("/login")
+  }
+  const studentId = session.user.studentId
+
   try {
-    const session = await getServerSession(authOptions)
-
-    if (!session?.user?.studentId) {
-      return null
-    }
-
     // 학생 정보 및 현재 배정 클래스 확인
     const student = await prisma.student.findUnique({
-      where: { id: session.user.studentId },
+      where: { id: studentId },
       select: {
         status: true,
         studentClasses: {
@@ -96,7 +102,7 @@ export default async function StudentHomePage() {
         },
         progress: {
           where: {
-            studentId: session.user.studentId,
+            studentId,
           },
           select: {
             moduleId: true,
@@ -173,7 +179,7 @@ export default async function StudentHomePage() {
 
     return (
       <StudentHomeContent
-        assignments={assignments}
+        assignments={toClientAssignments(assignments)}
         semesterCodes={filteredSemesterCodes}
         levelCodes={filteredLevelCodesNormalized}
         semesterLevelMapBySemester={semesterLevelMapBySemester}

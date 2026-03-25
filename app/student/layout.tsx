@@ -53,7 +53,12 @@ export default async function StudentLayout({
     )
   }
 
-  const backgroundUrl = await getActiveStudentBackgroundUrl()
+  let backgroundUrl: string | null = null
+  try {
+    backgroundUrl = await getActiveStudentBackgroundUrl()
+  } catch (e) {
+    console.error("Student layout: background URL failed:", e)
+  }
 
   return (
     <div className="relative flex flex-col h-screen bg-gray-50">

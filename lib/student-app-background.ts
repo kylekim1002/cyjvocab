@@ -78,6 +78,8 @@ export async function getActiveStudentBackgroundUrl(): Promise<string | null> {
       console.warn("[StudentAppBackground] table missing; using default student background.")
       return null
     }
-    throw e
+    // 레이아웃에서 throw하면 /student 전체가 500(서버 예외)로 떨어짐 — router.refresh() 시에도 동일
+    console.error("[StudentAppBackground] query failed:", e)
+    return null
   }
 }
