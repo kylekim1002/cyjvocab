@@ -46,67 +46,11 @@ interface ClassManagementProps {
 }
 
 export function ClassManagement({
-  initialClasses,
   campuses,
   codes,
 }: ClassManagementProps) {
   const { toast } = useToast()
-  const [classes, setClasses] = useState(initialClasses || [])
-  
-  // 서버에서 최신 데이터 가져오기 (성공하고 데이터가 있을 때만 업데이트)
-  const refreshClasses = async () => {
-    try {
-      const response = await fetch("/api/admin/classes")
-      if (response.ok) {
-        const latestClasses = await response.json()
-        if (Array.isArray(latestClasses) && latestClasses.length > 0) {
-          // API 응답을 컴포넌트가 기대하는 형식으로 변환
-          const transformedClasses = latestClasses.map((cls: any) => ({
-            id: cls.id,
-            name: cls.name,
-            createdAt: cls.createdAt,
-            campusId: cls.campusId,
-            levelId: cls.levelId,
-            gradeId: cls.gradeId,
-            teacherId: cls.teacherId,
-            campus: cls.campus || { id: "", name: "" },
-            level: cls.level
-              ? { id: cls.level.id, value: cls.level.value }
-              : { value: "" },
-            grade: cls.grade
-              ? { id: cls.grade.id, value: cls.grade.value }
-              : { value: "" },
-            teacher: cls.teacher
-              ? { id: cls.teacher.id, name: cls.teacher.name }
-              : { name: "" },
-          }))
-          setClasses(transformedClasses)
-          console.log("Refreshed classes:", transformedClasses.length)
-        } else {
-          console.log("API returned empty array, keeping existing data")
-          // 빈 배열이면 기존 데이터 유지
-        }
-      } else {
-        console.error("Failed to refresh classes: HTTP", response.status)
-        // 실패해도 기존 데이터 유지
-      }
-    } catch (error) {
-      console.error("Failed to refresh classes:", error)
-      // 에러 발생해도 기존 데이터 유지
-    }
-  }
-
-  // initialClasses가 있으면 우선 사용, 없을 때만 API 호출
-  useEffect(() => {
-    if (!initialClasses || initialClasses.length === 0) {
-      console.log("No initial classes, fetching from API")
-      refreshClasses()
-    } else {
-      console.log("Using initial classes:", initialClasses.length)
-      setClasses(initialClasses)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  const [classes, setClasses] = useState<Class[]>([])
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [editingClassId, setEditingClassId] = useState<string | null>(null)
@@ -346,21 +290,24 @@ export function ClassManagement({
     
     setIsLoading(true)
     try {
-      const params = new URLSearchParams({
-        campus_id: filterCampusId,
-      })
-      
-      if (filterType !== "all" && filterValue) {
-        if (filterType === "level") {
-          params.append("level_id", filterValue)
-        } else if (filterType === "grade") {
-          params.append("grade_id", filterValue)
-        } else if (filterType === "teacher") {
-          params.append("teacher_id", filterValue)
+      // "전체캠퍼스" 선택 시에는 캠퍼스/조건을 무시하고 전부 조회
+      const params = new URLSearchParams()
+      if (filterCampusId !== "all") {
+        params.append("campus_id", filterCampusId)
+
+        if (filterType !== "all" && filterValue) {
+          if (filterType === "level") {
+            params.append("level_id", filterValue)
+          } else if (filterType === "grade") {
+            params.append("grade_id", filterValue)
+          } else if (filterType === "teacher") {
+            params.append("teacher_id", filterValue)
+          }
         }
       }
-      
-      const response = await fetch(`/api/admin/classes?${params}`)
+
+      const url = params.toString() ? `/api/admin/classes?${params}` : "/api/admin/classes"
+      const response = await fetch(url)
       if (response.ok) {
         const data = await response.json()
         setClasses(data)
@@ -1084,6 +1031,7 @@ export function ClassManagement({
                     <SelectValue placeholder="캠퍼스 선택" />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="all">전체캠퍼스</SelectItem>
                     {campuses.map((campus) => (
                       <SelectItem key={campus.id} value={campus.id}>
                         {campus.name}
@@ -1176,7 +1124,11 @@ export function ClassManagement({
                 <Button
                   type="button"
                   onClick={handleSearch}
-                  disabled={isLoading || !filterCampusId || (filterType !== "all" && !filterValue)}
+                  disabled={
+                    isLoading ||
+                    !filterCampusId ||
+                    (filterCampusId !== "all" && filterType !== "all" && !filterValue)
+                  }
                 >
                   조회
                 </Button>
